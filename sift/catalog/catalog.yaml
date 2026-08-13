@@ -1,0 +1,157 @@
+# What a full disk is usually full of.
+#
+# This file is data, not code, on purpose: it is the part that accretes value, and
+# adding a rule should never require a release.
+#
+# Matching
+#   "**/name"     a directory called `name`, at any depth
+#   "~/a/b"       that exact location, resolved against the user's home
+#   "*"           globs within a single path segment
+#
+# requires_sibling guards generic names. `target` is build output when a Cargo.toml
+# sits beside it, and somebody's actual folder when it doesn't.
+
+rules:
+  # ---------------------------------------------- installed dependencies ----
+  - id: node-modules
+    label: node_modules
+    match: "**/node_modules"
+    requires_sibling: package.json
+    verdict: regenerable
+    restore: npm install
+    restore_time: ~4 min
+
+  - id: python-venv
+    label: virtualenv
+    match: "**/.venv"
+    requires_sibling: pyproject.toml
+    verdict: regenerable
+    restore: uv sync
+    restore_time: ~1 min
+
+  # ---------------------------------------------------------- build output ----
+  - id: cargo-target
+    label: Rust build output
+    match: "**/target"
+    requires_sibling: Cargo.toml
+    verdict: regenerable
+    restore: cargo build
+    restore_time: ~3 min
+
+  - id: xcode-derived-data
+    label: Xcode DerivedData
+    match: "~/Library/Developer/Xcode/DerivedData"
+    verdict: regenerable
+    restore: rebuilds when you next open the project
+    restore_time: ~90 sec
+
+  - id: xcode-archives
+    label: Xcode archives
+    match: "~/Library/Developer/Xcode/Archives"
+    verdict: review
+    restore: cannot be rebuilt once a release is shipped
+    restore_time: null
+
+  - id: gradle-build
+    label: Gradle build output
+    match: "**/build"
+    requires_sibling: build.gradle
+    verdict: regenerable
+    restore: ./gradlew build
+    restore_time: ~3 min
+
+  # --------------------------------------------------- package manager caches ----
+  - id: npm-cache
+    label: npm cache
+    match: "~/.npm/_cacache"
+    verdict: regenerable
+    restore: refills as you install packages
+    restore_time: ~1 min
+
+  - id: cargo-registry
+    label: Cargo registry cache
+    match: "~/.cargo/registry"
+    verdict: regenerable
+    restore: refills on next cargo build
+    restore_time: ~2 min
+
+  - id: pip-cache
+    label: pip cache
+    match: "~/Library/Caches/pip"
+    verdict: regenerable
+    restore: refills as you install packages
+    restore_time: ~1 min
+
+  - id: uv-cache
+    label: uv cache
+    match: "~/.cache/uv"
+    verdict: regenerable
+    restore: refills as you sync
+    restore_time: ~1 min
+
+  - id: homebrew-cache
+    label: Homebrew downloads
+    match: "~/Library/Caches/Homebrew"
+    verdict: regenerable
+    restore: brew cleanup already discards these
+    restore_time: ~2 min
+
+  # ------------------------------------------------------ application caches ----
+  - id: user-caches
+    label: application caches
+    match: "~/Library/Caches"
+    verdict: regenerable
+    restore: apps rebuild their own caches on next launch
+    restore_time: seconds
+
+  - id: docker-data
+    label: Docker disk image
+    match: "~/Library/Containers/com.docker.docker/Data/vms"
+    verdict: review
+    restore: images and volumes must be pulled or rebuilt
+    restore_time: ~10 min
+
+  # --------------------------------------------------------------- disposable ----
+  - id: trash
+    label: Trash
+    match: "~/.Trash"
+    verdict: regenerable
+    restore: nothing — this is already deleted
+    restore_time: instant
+
+  - id: ios-backups
+    label: iOS device backups
+    match: "~/Library/Application Support/MobileSync/Backup"
+    verdict: review
+    restore: only by taking a fresh backup from the device
+    restore_time: ~20 min
+
+  # ------------------------------------------------------------- protected ----
+  # These exist so the answer is "never", stated, rather than "unknown", inferred.
+  - id: documents
+    label: Documents
+    match: "~/Documents"
+    verdict: irreplaceable
+    restore: null
+    restore_time: null
+
+  - id: desktop
+    label: Desktop
+    match: "~/Desktop"
+    verdict: irreplaceable
+    restore: null
+    restore_time: null
+
+  - id: pictures
+    label: Pictures
+    match: "~/Pictures"
+    verdict: irreplaceable
+    restore: null
+    restore_time: null
+
+  - id: ssh-keys
+    label: SSH keys
+    match: "~/.ssh"
+    verdict: irreplaceable
+    restore: null
+    restore_time: null

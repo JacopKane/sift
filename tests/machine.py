@@ -37,8 +37,14 @@ FILES: dict[str, int] = {
     # Things you would hate to lose.
     "Documents/contract-signed.pdf": 90 * KB,
     "Archive/clients-2021/final-delivery.zip": 640 * KB,
-    # Downloads: mixed, and TCC-gated on a real Mac.
+    # Downloads, shaped after a real one: 8.6 GB over 124 files, where two files
+    # were 97% of it and 93 PDFs were noise. The long tail is not the problem.
+    "Downloads/screen-recording-2024-11-14.mp4": 5200 * KB,
+    "Downloads/dataset-export.zip": 3100 * KB,
     "Downloads/installer.dmg": 520 * KB,
+    "Downloads/invoice-2024-01.pdf": 3 * KB,
+    "Downloads/invoice-2024-02.pdf": 3 * KB,
+    "Downloads/invoice-2024-03.pdf": 4 * KB,
     "Downloads/notes.txt": 4 * KB,
 }
 

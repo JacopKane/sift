@@ -9,7 +9,7 @@ import pytest
 from pytest_bdd import given, parsers, then, when
 
 from sift.models import ScanNode
-from sift.scanner import walk
+from sift.survey import survey
 from tests import machine as machine_module
 from tests.machine import Machine
 
@@ -61,7 +61,9 @@ def a_developers_mac(machine: Machine) -> None:
 
 @when("I survey the machine", target_fixture="reports")
 def survey_the_machine(machine: Machine) -> list[ScanNode]:
-    return list(walk(machine.root))
+    # The catalog is anchored at the machine root, so its ~/... rules resolve
+    # against the fixture rather than against the real home directory.
+    return list(survey(machine.root, home=machine.root))
 
 
 @then("the survey total matches every file that was written")
