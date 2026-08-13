@@ -17,16 +17,16 @@ Feature: What the browser can do
 
   Scenario: The browser is warned before it can bin something protected
     When the browser surveys the machine
-    And the browser baskets "Documents"
+    And the browser baskets ".ssh"
     Then it is refused with a warning
-    And "Documents" is back where it was
+    And ".ssh" is back where it was
 
   Scenario: Insisting gets past the warning
     When the browser surveys the machine
-    And the browser insists on basketing "Documents"
+    And the browser insists on basketing ".ssh"
     And the browser empties the basket
     Then the response says it was overridden
-    And "Documents" is gone from where it was
+    And ".ssh" is gone from where it was
 
   Scenario: The browser can ask for duplicates
     Given a file "Downloads/report.pdf" holding "quarterly numbers"

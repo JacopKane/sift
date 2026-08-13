@@ -159,30 +159,53 @@ rules:
     restore: null
     restore_time: null
 
-  - id: documents
-    label: Documents
-    match: "~/Documents"
-    verdict: irreplaceable
-    restore: null
-    restore_time: null
-
-  - id: desktop
-    label: Desktop
-    match: "~/Desktop"
-    verdict: irreplaceable
-    restore: null
-    restore_time: null
-
-  - id: pictures
-    label: Pictures
-    match: "~/Pictures"
-    verdict: irreplaceable
-    restore: null
-    restore_time: null
-
+  # Credentials. These are never-delete whatever is inside them, because the
+  # thing that makes them precious is what they are, not what they contain.
   - id: ssh-keys
     label: SSH keys
     match: "~/.ssh"
     verdict: irreplaceable
     restore: null
+    restore_time: null
+
+  - id: gnupg
+    label: GPG keys
+    match: "~/.gnupg"
+    verdict: irreplaceable
+    restore: null
+    restore_time: null
+
+  - id: keychains
+    label: Keychains
+    match: "~/Library/Keychains"
+    verdict: irreplaceable
+    restore: null
+    restore_time: null
+
+  # ------------------------------------------------------- worth a look ----
+  # Desktop, Documents and Pictures are locations, not kinds of thing. They hold
+  # signed contracts and they hold screenshots nobody has opened since. Marking
+  # the folder irreplaceable was the same mistake as calling a mixed Downloads
+  # folder disposable — it decides for the person instead of showing them, and it
+  # made "delete the screenshots on my Desktop" impossible without an override.
+  # Review is the honest verdict: look before you act.
+  - id: documents
+    label: Documents
+    match: "~/Documents"
+    verdict: review
+    restore: whatever is in here has to be judged file by file
+    restore_time: null
+
+  - id: desktop
+    label: Desktop
+    match: "~/Desktop"
+    verdict: review
+    restore: whatever is in here has to be judged file by file
+    restore_time: null
+
+  - id: pictures
+    label: Pictures
+    match: "~/Pictures"
+    verdict: review
+    restore: whatever is in here has to be judged file by file
     restore_time: null

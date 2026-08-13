@@ -38,10 +38,10 @@ Feature: Recognising what a directory is
     And "Sites/old-project/src" is irreplaceable
     And "Sites/client-app/src" is never proposed for deletion
 
-  Scenario: Personal directories are protected by the catalog, not merely unrecognised
+  Scenario: Credentials are protected for what they are, not where they sit
     When I survey the machine
-    Then "Documents" is irreplaceable
-    And "Documents" is never proposed for deletion
+    Then ".ssh" is irreplaceable
+    And ".ssh" is never proposed for deletion
 
   Scenario: A recognised directory is counted without being explored
     When I survey the machine

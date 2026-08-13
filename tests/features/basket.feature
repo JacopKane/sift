@@ -19,31 +19,31 @@ Feature: Deciding for yourself what goes
     And it is sitting in quarantine
 
   Scenario: Protected things are refused unless you insist
-    When I try to put "Documents" in the basket
-    Then it warns that "Documents" cannot be replaced
-    And "Documents" is back where it was
+    When I try to put ".ssh" in the basket
+    Then it warns that ".ssh" cannot be replaced
+    And ".ssh" is back where it was
 
   Scenario: Insisting is enough, because it is your disk
-    When I insist on putting "Documents" in the basket
+    When I insist on putting ".ssh" in the basket
     And I empty the basket
-    Then "Documents" is gone from where it was
+    Then ".ssh" is gone from where it was
     And it is sitting in quarantine
     And the receipt records that it was overridden
 
   Scenario: Even an overridden delete can be taken back
-    When I insist on putting "Documents" in the basket
+    When I insist on putting ".ssh" in the basket
     And I empty the basket
     And I undo
-    Then "Documents" is back where it was
+    Then ".ssh" is back where it was
     And it still holds everything it held before
 
   Scenario: A file inside a protected folder is protected too
-    When I try to put "Documents/contract-signed.pdf" in the basket
-    Then it warns that "contract-signed.pdf" cannot be replaced
-    And "Documents/contract-signed.pdf" is back where it was
+    When I try to put ".ssh/id_ed25519" in the basket
+    Then it warns that "id_ed25519" cannot be replaced
+    And ".ssh/id_ed25519" is back where it was
 
   Scenario: Insisting on a file inside a protected folder is recorded as overridden
-    When I insist on putting "Documents/contract-signed.pdf" in the basket
+    When I insist on putting ".ssh/id_ed25519" in the basket
     And I empty the basket
     Then the receipt records that it was overridden
 

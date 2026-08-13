@@ -51,17 +51,17 @@ def survey(
     catalog = load_catalog(home)
 
     def already_named(path: Path) -> bool:
-        """Skip the contents of what a rule already settles — but not of what it
-        protects.
+        """Skip the contents of what rebuilds itself, and nothing else.
 
-        Pruning exists because a recognised cache's internals teach you nothing.
-        A protected directory is the opposite case: its contents are exactly what
-        somebody might want to look through, override, or find duplicates in. Not
-        exploring it made "delete the screenshots on my Desktop" answer "those are
-        protected" with no way to proceed.
+        A recognised cache's internals teach you nothing the verdict has not
+        already said, so walking them is waste. Every other verdict is the
+        opposite case. `review` literally means look inside; `irreplaceable`
+        marks contents somebody may still want to see, override, or find
+        duplicates in. Pruning either one is what made "delete the screenshots on
+        my Desktop" answer "those are protected" with no way to proceed.
         """
         rule = catalog.recognise(path, is_dir=True)
-        return rule is not None and rule.verdict is not Verdict.IRREPLACEABLE
+        return rule is not None and rule.verdict is Verdict.REGENERABLE
 
     for node in walk(root, exclude, prune=already_named):
         rule = catalog.recognise(node.path, is_dir=node.is_dir)

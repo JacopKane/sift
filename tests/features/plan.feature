@@ -24,8 +24,8 @@ Feature: Turning verdicts into something you can act on
   Scenario: Irreplaceable things are shown but never proposed
     When I survey the machine
     And I build a plan
-    Then "Documents" is not proposed
-    And "Documents" is listed as protected
+    Then ".ssh" is not proposed
+    And ".ssh" is listed as protected
 
   Scenario: Every proposal says how to get it back
     When I survey the machine

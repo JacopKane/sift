@@ -37,7 +37,7 @@ Feature: Finding the same thing twice
     Then the reclaimable copy is not the oldest one
     And what could be reclaimed is the size of one copy, not both
 
-  Scenario: A copy hiding in a protected folder is still found
+  Scenario: A copy hiding in a folder that needs review is still found
     Given a file "Downloads/report.pdf" holding "quarterly numbers"
     And a file "Documents/report-final.pdf" holding "quarterly numbers"
     When I look for duplicates

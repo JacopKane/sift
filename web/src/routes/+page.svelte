@@ -1,17 +1,26 @@
 <script lang="ts">
+	import Search from '@lucide/svelte/icons/search';
+	import Sparkles from '@lucide/svelte/icons/sparkles';
+	import Copy from '@lucide/svelte/icons/copy';
+	import Plus from '@lucide/svelte/icons/plus';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import Sunburst, { type ChartNode } from '$lib/components/Sunburst.svelte';
-	import PlanList from '$lib/components/PlanList.svelte';
-	import Answer from '$lib/components/Answer.svelte';
-	import Basket from '$lib/components/Basket.svelte';
-	import DropZone from '$lib/components/DropZone.svelte';
-	import Duplicates from '$lib/components/Duplicates.svelte';
+	import Steps from '$lib/components/Steps.svelte';
+	import Start from '$lib/components/Start.svelte';
+	import Group from '$lib/components/Group.svelte';
+	import Row from '$lib/components/Row.svelte';
+	import BasketDock from '$lib/components/BasketDock.svelte';
+	import DuplicateStack from '$lib/components/DuplicateStack.svelte';
 	import { size, VERDICT } from '$lib/format';
 	import type { Plan, AskResult, BasketState, DuplicateReport } from '$lib/types';
 
-	let root = $state('~/Downloads');
-	let judge = $state(true);
+	const STEPS = ['Choose', 'Review', 'Reclaim'];
+
+	let step = $state(0);
 	let surveying = $state(false);
+	let counted = $state(0);
 	let status = $state('');
 	let chart = $state<ChartNode | null>(null);
 	let plan = $state<Plan | null>(null);
@@ -20,53 +29,63 @@
 	let prompt = $state('');
 	let asking = $state(false);
 	let answer = $state<AskResult | null>(null);
-	let askError = $state('');
+	let problem = $state('');
 
-	const EXAMPLES = [
-		'remove all the torrent files',
-		'get rid of the disk image installers',
-		'delete the small video files'
-	];
+	let basket = $state<BasketState>({ items: [], total_bytes: 0 });
+	let duplicates = $state<DuplicateReport | null>(null);
 
-	function survey(event: SubmitEvent) {
-		event.preventDefault();
+	const kept = $derived(plan ? plan.protected.reduce((t, i) => t + i.size_bytes, 0) : 0);
+	const safe = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'regenerable') : []);
+	const undecided = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'review') : []);
+
+	function survey(where: string) {
+		step = 1;
 		surveying = true;
+		counted = 0;
 		answer = null;
-		askError = '';
-		let seen = 0;
+		problem = '';
 
-		const stream = new EventSource(
-			`/api/survey?root=${encodeURIComponent(root)}&judge=${judge}`
-		);
+		const stream = new EventSource(`/api/survey?root=${encodeURIComponent(where)}&judge=true`);
 
 		stream.addEventListener('directory', (e) => {
-			seen += 1;
-			// A large projects folder emits tens of thousands of these; repainting on
-			// every one costs more than the survey does.
-			if (seen % 50 === 0 || seen < 10) {
-				status = `${seen.toLocaleString()} directories · ${JSON.parse(e.data).name}`;
+			counted += 1;
+			if (counted % 50 === 0 || counted < 10) {
+				status = `${counted.toLocaleString()} folders · ${JSON.parse(e.data).name}`;
 			}
 		});
-
 		stream.addEventListener('judging', (e) => {
-			status = `${seen.toLocaleString()} directories · asking about ${JSON.parse(e.data).count}…`;
+			status = `judging ${JSON.parse(e.data).count}…`;
 		});
-
 		stream.addEventListener('done', (e) => {
 			const payload = JSON.parse(e.data);
 			chart = payload.chart;
 			plan = payload.plan;
-			status = `${seen.toLocaleString()} directories surveyed`;
-			surveyedRoot = root;
+			surveyedRoot = where;
+			status = `${counted.toLocaleString()} folders`;
 			surveying = false;
 			stream.close();
 		});
-
 		stream.onerror = () => {
-			status = 'Survey stopped. Check the path is readable.';
+			problem = `Could not read ${where}. macOS may be blocking it — grant Full Disk Access to your terminal in System Settings › Privacy & Security, then try again.`;
 			surveying = false;
 			stream.close();
 		};
+	}
+
+	async function analyseDropped(payload: { name: string; files: unknown[] }) {
+		step = 1;
+		surveying = true;
+		const res = await fetch('/api/dropped', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload)
+		});
+		const body = await res.json();
+		chart = body.chart;
+		plan = body.plan;
+		surveyedRoot = null;
+		status = `${payload.files.length.toLocaleString()} files, read in your browser`;
+		surveying = false;
 	}
 
 	async function ask(event: SubmitEvent) {
@@ -74,14 +93,10 @@
 		await run(prompt, false);
 	}
 
-	async function insist() {
-		await run(prompt, true);
-	}
-
 	async function run(question: string, override: boolean) {
-		if (!question.trim()) return;
+		if (!question.trim() || !surveyedRoot) return;
 		asking = true;
-		askError = '';
+		problem = '';
 		answer = null;
 		try {
 			const res = await fetch('/api/ask', {
@@ -93,18 +108,13 @@
 			if (!res.ok) throw new Error(body.detail ?? 'That did not work.');
 			answer = body;
 		} catch (error) {
-			askError = error instanceof Error ? error.message : String(error);
+			problem = error instanceof Error ? error.message : String(error);
 		} finally {
 			asking = false;
 		}
 	}
 
-	let basket = $state<BasketState>({ items: [], total_bytes: 0 });
-	let duplicates = $state<DuplicateReport | null>(null);
-	let notice = $state('');
-
-	async function addToBasket(path: string, override = false) {
-		notice = '';
+	async function addToBasket(path: string, override = false): Promise<void> {
 		const res = await fetch('/api/basket', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -112,14 +122,14 @@
 		});
 		const body = await res.json();
 		if (res.status === 409) {
-			// Not forbidden — not yet insisted upon. Ask, then let them through.
-			if (confirm(`${body.detail}\n\nAdd it anyway? It still goes to quarantine, not the bin.`)) {
+			// Not forbidden — not yet insisted upon.
+			if (confirm(`${body.detail}\n\nAdd it anyway? It goes to quarantine, not the bin.`)) {
 				return addToBasket(path, true);
 			}
 			return;
 		}
-		if (!res.ok) throw new Error(body.detail ?? 'That did not work.');
 		basket = body;
+		step = 2;
 	}
 
 	async function emptyBasket() {
@@ -127,19 +137,17 @@
 			method: 'POST'
 		});
 		const body = await res.json();
-		notice = `Moved ${size(body.freed_bytes)} to quarantine. Nothing was deleted.`;
+		status = `moved ${size(body.freed_bytes)} to quarantine`;
 		basket = { items: [], total_bytes: 0 };
 	}
 
 	async function clearBasket() {
-		const res = await fetch('/api/basket', { method: 'DELETE' });
-		basket = await res.json();
+		basket = await (await fetch('/api/basket', { method: 'DELETE' })).json();
 	}
 
 	async function undo() {
-		const res = await fetch('/api/undo', { method: 'POST' });
-		const body = await res.json();
-		notice = `Put ${body.restored.length} back where they were.`;
+		const body = await (await fetch('/api/undo', { method: 'POST' })).json();
+		status = `put ${body.restored.length} back`;
 	}
 
 	async function loadDuplicates() {
@@ -147,191 +155,232 @@
 		if (res.ok) duplicates = await res.json();
 	}
 
-	async function analyseDropped(payload: { name: string; files: unknown[] }) {
-		const res = await fetch('/api/dropped', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(payload)
-		});
-		if (!res.ok) throw new Error('That folder could not be analysed.');
-		const body = await res.json();
-		chart = body.chart;
-		plan = body.plan;
+	function restart() {
+		step = 0;
+		plan = null;
+		chart = null;
+		answer = null;
+		duplicates = null;
 		surveyedRoot = null;
-		status = `${payload.files.length.toLocaleString()} files read in your browser`;
+		status = '';
 	}
-
-	const keptBack = $derived(
-		plan ? plan.protected.reduce((total, item) => total + item.size_bytes, 0) : 0
-	);
 </script>
 
-<header
-	class="flex flex-wrap items-center gap-3 border-b px-4 py-3 sm:px-6"
-	style="border-color: var(--edge)"
->
-	<h1 class="font-mono text-[13px] tracking-[0.34em] uppercase whitespace-nowrap">
-		<span style="color: var(--faint)">~/</span>sift
-	</h1>
+<!-- The page never scrolls. Each region scrolls itself, so no group is ever
+     hidden behind another one's length. -->
+<div class="flex h-screen flex-col overflow-hidden">
+	<header
+		class="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2.5 sm:px-5"
+		style="border-color: var(--edge)"
+	>
+		<h1 class="font-mono text-[13px] tracking-[0.3em] uppercase whitespace-nowrap">
+			<span style="color: var(--faint)">~/</span>sift
+		</h1>
 
-	<form class="flex min-w-0 flex-1 flex-wrap items-center gap-2" onsubmit={survey}>
-		<label class="sr-only" for="root">Folder to survey</label>
-		<input
-			id="root"
-			bind:value={root}
-			spellcheck="false"
-			class="min-w-0 flex-1 rounded-md border px-3 py-2 font-mono text-[13px]"
-			style="background: var(--surface); border-color: var(--edge); color: var(--text)"
-		/>
-		<label class="flex items-center gap-2 text-[13px] whitespace-nowrap" style="color: var(--muted)">
-			<input type="checkbox" bind:checked={judge} class="accent-[var(--regenerable)]" />
-			ask the model
-		</label>
-		<button
-			type="submit"
-			disabled={surveying}
-			class="rounded-md px-4 py-2 text-[13px] font-semibold disabled:opacity-50"
-			style="background: var(--regenerable); color: var(--ground)"
-		>
-			{surveying ? 'Surveying…' : 'Survey'}
-		</button>
-	</form>
-
-	<p class="font-mono text-xs whitespace-nowrap" style="color: var(--muted)" role="status">
-		{status}
-	</p>
-
-	<ThemeToggle />
-</header>
-
-<main id="main" class="mx-auto grid max-w-[1240px] gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[430px_minmax(0,1fr)] lg:gap-11">
-	<section class="lg:sticky lg:top-6" aria-label="Disk map">
-		<Sunburst tree={chart} />
-		<ul class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs" style="color: var(--muted)">
-			{#each Object.entries(VERDICT) as [key, meta] (key)}
-				<li class="flex items-center gap-1.5">
-					<span class="inline-block size-2.5 rounded-[2px]" style="background: {meta.token}"></span>
-					<span aria-hidden="true">{meta.glyph}</span>
-					{meta.label}
-				</li>
-			{/each}
-			<li class="flex items-center gap-1.5">
-				<span class="inline-block size-2.5 rounded-[2px]" style="background: var(--unknown)"></span>
-				not yet judged
-			</li>
-		</ul>
-	</section>
-
-	<section aria-label="Plan" class="min-w-0">
-		{#if !plan}
-			<DropZone onDropped={analyseDropped} />
-		{/if}
-		{#if surveyedRoot}
-			<form class="mb-3 flex flex-wrap gap-2" onsubmit={ask}>
-				<label class="sr-only" for="prompt">What to remove</label>
-				<input
-					id="prompt"
-					bind:value={prompt}
-					placeholder="Tell it what to get rid of…"
-					class="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
-					style="background: var(--surface); border-color: var(--edge); color: var(--text)"
-				/>
-				<button
-					type="submit"
-					disabled={asking}
-					class="rounded-md border px-4 py-2 text-[13px] font-medium disabled:opacity-50"
-					style="background: var(--surface); border-color: var(--edge); color: var(--text)"
-				>
-					{asking ? 'Looking…' : 'Ask'}
-				</button>
-			</form>
-
-			<p class="mb-5 text-xs" style="color: var(--faint)">
-				Try:
-				{#each EXAMPLES as example, index (example)}
-					<button
-						type="button"
-						class="underline-offset-2 hover:underline"
-						style="color: var(--muted)"
-						onclick={() => (prompt = example)}>{example}</button
-					>{#if index < EXAMPLES.length - 1}<span aria-hidden="true"> · </span>{/if}
-				{/each}
-			</p>
-		{/if}
-
-		{#if askError}
-			<p class="mb-5 rounded-md border px-4 py-3 text-sm" style="border-color: var(--edge); color: var(--text)" role="alert">
-				{askError}
-			</p>
-		{/if}
-
-		{#if answer}
-			<Answer result={answer} onBasket={(path) => addToBasket(path, true)} />
-
-			{#if !answer.selected.length && answer.reason.toLowerCase().includes('protect')}
-				<p class="mb-5 text-[12.5px]" style="color: var(--muted)">
-					Those are protected. It is your disk — you can insist, and they will still go to
-					quarantine rather than be deleted.
-					<button
-						type="button"
-						onclick={insist}
-						class="ml-1 rounded border px-2 py-0.5 text-xs"
-						style="border-color: var(--irreplaceable); color: var(--irreplaceable)"
-					>
-						I mean it — include protected
-					</button>
-				</p>
-			{/if}
-		{/if}
-
-		{#if notice}
-			<p
-				class="mb-5 rounded-md border px-4 py-3 text-sm"
-				style="border-color: var(--edge); color: var(--text)"
-				role="status"
+		{#if step > 0}
+			<button
+				type="button"
+				onclick={restart}
+				class="rounded-md border p-1.5"
+				style="border-color: var(--edge); color: var(--muted)"
+				aria-label="Choose another folder"
+				title="Choose another folder"
 			>
-				{notice}
-				<button type="button" onclick={undo} class="ml-2 underline" style="color: var(--regenerable)">
-					Undo
-				</button>
-			</p>
+				<ArrowLeft size={15} aria-hidden="true" />
+			</button>
 		{/if}
 
-		{#if basket.items.length}
-			<Basket
-				items={basket.items}
-				total={basket.total_bytes}
-				onEmpty={emptyBasket}
-				onClear={clearBasket}
-			/>
-		{/if}
+		<Steps current={step} steps={STEPS} />
 
-		<dl class="flex flex-wrap gap-x-8 gap-y-3 border-b pb-4" style="border-color: var(--edge)">
-			{#each [['safe to reclaim', plan?.reclaimable_bytes, 'var(--regenerable)'], ['needs you', plan?.needs_review_bytes, 'var(--review)'], ['kept back', plan ? keptBack : undefined, 'var(--irreplaceable)']] as [label, value, token] (label)}
-				<div>
-					<dd class="font-mono text-2xl tracking-tight" style="color: {token}">
-						{value === undefined ? '—' : size(value as number)}
-					</dd>
-					<dt class="text-[11px] tracking-[0.1em] uppercase" style="color: var(--muted)">{label}</dt>
-				</div>
-			{/each}
-		</dl>
+		<span class="flex-1"></span>
 
-		<PlanList title="Proposed" onBasket={addToBasket} items={plan?.proposals ?? []} empty={plan ? 'Nothing here can be safely reclaimed.' : "Run a survey to see what's here."} />
-		<PlanList title="Kept back" onBasket={addToBasket} items={plan?.protected ?? []} empty={plan ? 'Nothing here needed protecting.' : ''} />
-		{#if surveyedRoot}
-			{#if duplicates}
-				<Duplicates report={duplicates} onBasket={(path) => addToBasket(path)} />
-			{:else}
-				<button
-					type="button"
-					onclick={loadDuplicates}
-					class="mt-7 rounded-md border px-3 py-2 text-[13px]"
-					style="border-color: var(--edge); color: var(--text)"
-				>
-					Look for the same file twice
-				</button>
-			{/if}
+		{#if status}
+			<span class="font-mono text-xs" style="color: var(--muted)" role="status">{status}</span>
 		{/if}
-	</section>
-</main>
+		<ThemeToggle />
+	</header>
+
+	{#if step === 0}
+		<Start onDropped={analyseDropped} onPick={survey} reading={surveying} {counted} />
+	{:else}
+		<main
+			id="main"
+			class="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[340px_minmax(0,1fr)_290px]"
+		>
+			<section class="hidden min-h-0 flex-col lg:flex" aria-label="Disk map">
+				<Sunburst tree={chart} />
+				<ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style="color: var(--muted)">
+					{#each Object.entries(VERDICT) as [key, meta] (key)}
+						<li class="flex items-center gap-1">
+							<span class="size-2 rounded-full" style="background: {meta.token}"></span>
+							<span aria-hidden="true">{meta.glyph}</span>
+							{meta.label}
+						</li>
+					{/each}
+				</ul>
+			</section>
+
+			<section class="flex min-h-0 flex-col gap-3 overflow-y-auto" aria-label="What was found">
+				{#if problem}
+					<p
+						class="rounded-lg border px-3.5 py-2.5 text-[13px]"
+						style="border-color: var(--review); color: var(--text)"
+						role="alert"
+					>
+						{problem}
+					</p>
+				{/if}
+
+				{#if surveyedRoot}
+					<form class="flex shrink-0 gap-2" onsubmit={ask}>
+						<label class="sr-only" for="prompt">What to get rid of</label>
+						<div class="relative flex-1">
+							<span
+								class="pointer-events-none absolute top-2.5 left-2.5"
+								style="color: var(--faint)"
+							>
+								<Sparkles size={15} aria-hidden="true" />
+							</span>
+							<input
+								id="prompt"
+								bind:value={prompt}
+								placeholder="delete the screenshots…"
+								class="w-full rounded-lg border py-2 pr-3 pl-8 text-[13px]"
+								style="background: var(--surface); border-color: var(--edge); color: var(--text)"
+							/>
+						</div>
+						<button
+							type="submit"
+							disabled={asking}
+							class="rounded-lg border p-2 disabled:opacity-40"
+							style="border-color: var(--edge); color: var(--text)"
+							aria-label="Ask"
+						>
+							<Search size={16} aria-hidden="true" />
+						</button>
+					</form>
+				{/if}
+
+				{#if answer}
+					<Group
+						title="Answer"
+						count={answer.selected.length}
+						bytes={answer.total_bytes}
+						token="var(--review)"
+					>
+						<p class="mb-2 text-[12.5px]" style="color: var(--muted)">{answer.reason}</p>
+						{#each answer.selected as file (file.path)}
+							<div class="flex items-center gap-2 px-2 py-1 text-[13px]">
+								<span class="min-w-0 flex-1 truncate" title={file.path}>{file.name}</span>
+								<span class="font-mono" style="color: var(--muted)">{size(file.size_bytes)}</span>
+								<button
+									type="button"
+									onclick={() => addToBasket(file.path, true)}
+									class="rounded p-1"
+									style="color: var(--muted)"
+									aria-label="Add {file.name} to basket"
+								>
+									<Plus size={15} aria-hidden="true" />
+								</button>
+							</div>
+						{/each}
+						{#if answer.selected.length}
+							<button
+								type="button"
+								onclick={() => answer?.selected.forEach((f) => addToBasket(f.path, true))}
+								class="mt-1.5 flex items-center gap-1.5 rounded border px-2 py-1 text-xs"
+								style="border-color: var(--edge); color: var(--text)"
+							>
+								<Plus size={13} aria-hidden="true" />
+								Add all {answer.selected.length}
+							</button>
+						{:else if answer.reason.toLowerCase().includes('protect')}
+							<button
+								type="button"
+								onclick={() => run(prompt, true)}
+								class="mt-1 rounded border px-2 py-1 text-xs"
+								style="border-color: var(--irreplaceable); color: var(--irreplaceable)"
+							>
+								I mean it — include protected
+							</button>
+						{/if}
+					</Group>
+				{/if}
+
+				{#if plan}
+					<Group
+						title="Safe to reclaim"
+						count={safe.length}
+						bytes={plan.reclaimable_bytes}
+						token="var(--regenerable)"
+					>
+						{#each safe as item (item.label + item.paths[0])}
+							<Row {item} onBasket={addToBasket} />
+						{/each}
+					</Group>
+
+					<Group
+						title="Needs a decision"
+						count={undecided.length}
+						bytes={plan.needs_review_bytes}
+						token="var(--review)"
+						open={false}
+					>
+						{#each undecided as item (item.label + item.paths[0])}
+							<Row {item} onBasket={addToBasket} />
+						{/each}
+					</Group>
+
+					<Group
+						title="Kept back"
+						count={plan.protected.length}
+						bytes={kept}
+						token="var(--irreplaceable)"
+						open={false}
+					>
+						{#each plan.protected as item (item.label + item.paths[0])}
+							<Row {item} onBasket={addToBasket} />
+						{/each}
+					</Group>
+
+					{#if surveyedRoot}
+						{#if duplicates}
+							<Group
+								title="The same file twice"
+								count={duplicates.sets.length}
+								bytes={duplicates.reclaimable_bytes}
+								token="var(--review)"
+								open={false}
+							>
+								{#each duplicates.sets as found (found.keep)}
+									<DuplicateStack {found} onBasket={addToBasket} />
+								{/each}
+							</Group>
+						{:else}
+							<button
+								type="button"
+								onclick={loadDuplicates}
+								class="flex shrink-0 items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-[13px]"
+								style="border-color: var(--edge); color: var(--muted)"
+							>
+								<Copy size={15} aria-hidden="true" />
+								Look for the same file twice
+							</button>
+						{/if}
+					{/if}
+				{/if}
+			</section>
+
+			<div class="min-h-0">
+				<BasketDock
+					items={basket.items}
+					total={basket.total_bytes}
+					onDrop={(path) => addToBasket(path)}
+					onEmpty={emptyBasket}
+					onClear={clearBasket}
+					onUndo={undo}
+				/>
+			</div>
+		</main>
+	{/if}
+</div>

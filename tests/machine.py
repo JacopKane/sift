@@ -44,6 +44,9 @@ FILES: dict[str, int] = {
     # dead weight. The catalog calls this `review` rather than guessing.
     "Library/Developer/Xcode/Archives/2024-11-14/App.xcarchive/Info.plist": 430 * KB,
     ".npm/_cacache/content-v2/sha512/ab/cd/blob": 380 * KB,
+    # Credentials: never-delete whatever they contain.
+    ".ssh/id_ed25519": 1 * KB,
+    ".ssh/known_hosts": 3 * KB,
     # Things you would hate to lose.
     "Documents/contract-signed.pdf": 90 * KB,
     "Archive/clients-2021/final-delivery.zip": 640 * KB,
