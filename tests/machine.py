@@ -31,8 +31,15 @@ FILES: dict[str, int] = {
     "Sites/old-project/target/debug/deps/core.rlib": 450 * KB,
     # Where macOS actually hides space.
     "Library/Caches/com.apple.Safari/cache.db": 250 * KB,
+    # A recognised directory nested inside another recognised directory: the pip
+    # cache has its own rule, and it lives inside ~/Library/Caches which also has
+    # one. Counting both would report the same bytes twice.
+    "Library/Caches/pip/http/ab/cd/blob": 310 * KB,
     "Library/Developer/Xcode/DerivedData/App-abc/Build/app.o": 800 * KB,
     "Library/Developer/Xcode/DerivedData/App-abc/Index/index.db": 200 * KB,
+    # Genuinely ambiguous: a shipped release cannot be rebuilt, but old ones are
+    # dead weight. The catalog calls this `review` rather than guessing.
+    "Library/Developer/Xcode/Archives/2024-11-14/App.xcarchive/Info.plist": 430 * KB,
     ".npm/_cacache/content-v2/sha512/ab/cd/blob": 380 * KB,
     # Things you would hate to lose.
     "Documents/contract-signed.pdf": 90 * KB,

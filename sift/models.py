@@ -46,6 +46,10 @@ class ScanNode(BaseModel):
     """Which catalog rule settled this, if any. Doubles as the grouping key: every
     node sharing a rule id becomes one line in the plan."""
 
+    label: str | None = None
+    """What to call this in the plan — the rule's name rather than the directory's,
+    so forty-seven paths read as one decision about node_modules."""
+
     verdict: Verdict | None = None
     """None means the catalog had nothing to say, and a model may be asked."""
 
@@ -87,3 +91,34 @@ class Classification(BaseModel):
     restore: str
     """Never optional. A verdict without a way back is exactly the information the
     user needed, so "cannot be restored" has to be said rather than left blank."""
+
+
+class PlanItem(BaseModel):
+    """One decision, however many directories it covers."""
+
+    label: str
+    verdict: Verdict
+    size_bytes: int
+    paths: list[Path]
+    restore: str
+    restore_time: str | None = None
+    rule_id: str | None = None
+    reason: str | None = None
+    """Why, when a model decided it. Catalog rules carry their reason in the label."""
+
+
+class Plan(BaseModel):
+    proposals: list[PlanItem]
+    """What could be reclaimed, largest first. Never includes anything irreplaceable."""
+
+    protected: list[PlanItem]
+    """Shown so you can see Sift understood your disk, never offered for deletion."""
+
+    reclaimable_bytes: int
+    """Only what is regenerable. Counting `review` here would promise space that
+    might turn out to be somebody's only copy."""
+
+    needs_review_bytes: int
+    """Held back pending a human decision — and the reason there's a conversation."""
+
+    surveyed_bytes: int

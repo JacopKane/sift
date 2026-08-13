@@ -37,6 +37,7 @@ def survey(
         rule = catalog.recognise(node.path, is_dir=node.is_dir)
         if rule is not None:
             node.rule_id = rule.id
+            node.label = rule.label
             node.verdict = rule.verdict
             node.restore = rule.restore
             node.restore_time = rule.restore_time
