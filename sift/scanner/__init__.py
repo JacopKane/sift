@@ -1,3 +1,3 @@
-from sift.scanner.walk import scan
+from sift.scanner.filesystem import scan, walk
 
-__all__ = ["scan"]
+__all__ = ["scan", "walk"]

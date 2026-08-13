@@ -7,6 +7,8 @@ portable to a CLI or a native shell.
 from __future__ import annotations
 
 import os
+from collections import deque
+from collections.abc import Generator, Iterator
 from pathlib import Path
 
 from sift.models import ScanNode
@@ -16,12 +18,31 @@ _BLOCK_SIZE = 512
 block size — a POSIX quirk, not a value to derive from the filesystem."""
 
 
+def walk(root: Path) -> Iterator[ScanNode]:
+    """Report each entry under *root* the moment its size is known.
+
+    Children are always reported before their parent, because a directory's size
+    isn't known until everything beneath it has been counted. The root is
+    therefore reported last, and carries the assembled tree.
+    """
+    yield from _walk_dir(Path(root))
+
+
 def scan(root: Path) -> ScanNode:
-    """Walk *root* and return it as a tree, with sizes summed bottom-up."""
-    return _scan_dir(Path(root))
+    """Drain :func:`walk` and return the finished tree.
+
+    For callers with no use for progress — tests, and anything that needs the
+    whole picture before it can start.
+    """
+    return deque(walk(root), maxlen=1)[0]
 
 
-def _scan_dir(path: Path) -> ScanNode:
+def _walk_dir(path: Path) -> Generator[ScanNode, None, ScanNode]:
+    """Yield everything under *path*, then *path* itself, and return it.
+
+    The return value is what lets a parent accumulate a child's totals without
+    having to guess which of the yielded nodes was the subtree root.
+    """
     node = ScanNode(
         path=path,
         name=path.name,
@@ -33,9 +54,11 @@ def _scan_dir(path: Path) -> ScanNode:
     try:
         entries = list(os.scandir(path))
     except PermissionError:
-        # Expected on macOS for TCC-gated directories. The tree keeps its shape so
-        # the UI can offer a grant button instead of losing the branch entirely.
+        # Expected on macOS for TCC-gated directories. The node is still reported
+        # so the tree keeps its shape and the UI can offer a grant button rather
+        # than silently losing the branch.
         node.unreadable = True
+        yield node
         return node
 
     for entry in entries:
@@ -44,11 +67,17 @@ def _scan_dir(path: Path) -> ScanNode:
         if entry.is_symlink():
             continue
 
-        child = _scan_dir(Path(entry.path)) if entry.is_dir() else _scan_file(entry)
+        if entry.is_dir():
+            child = yield from _walk_dir(Path(entry.path))
+        else:
+            child = _scan_file(entry)
+            yield child
+
         node.children.append(child)
         node.size_bytes += child.size_bytes
         node.allocated_bytes += child.allocated_bytes
 
+    yield node
     return node
 
 

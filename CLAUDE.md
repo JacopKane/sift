@@ -21,6 +21,26 @@ calls `os.remove`, `shutil.rmtree`, or equivalent on user data.
 commit. `.env.example` carries placeholders only. Never log a key, never send one to the
 frontend — all model calls go through the backend.
 
+## Decisions are made together
+
+**No architectural, product, dependency, or data-modelling decision is made unilaterally.**
+When a choice has more than one defensible answer, stop and present it:
+
+- the options, one line each
+- the tradeoff that actually separates them — not a feature list
+- a recommendation, with the reason it wins
+
+Then wait for an answer. Every decision here has to be defended out loud later, which means
+its author needs a reason they actually hold, not one handed to them after the fact.
+
+Record the outcome in the **commit body**: what was chosen, what was rejected, and why.
+`git log` is the decision record. There is exactly one human-facing document in this repo —
+`README.md` — and no side files accumulate beside it.
+
+Cheap and reversible choices — variable names, test file layout, formatting — don't need a
+round trip. The test is: **would someone reasonably ask "why did you do it that way?"** If
+yes, ask first.
+
 ## The loop
 
 1. Write or extend a scenario in `tests/features/*.feature`.

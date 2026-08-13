@@ -86,7 +86,7 @@ Most of Sift is not AI, on purpose. A model in the wrong layer is slower, costli
 
 | Layer | How | Why |
 |---|---|---|
-| Walk the tree, sizes, timestamps | `os.scandir`, threaded | A model is strictly worse at traversal and arithmetic |
+| Walk the tree, sizes, timestamps | `os.scandir` | A model is strictly worse at traversal and arithmetic |
 | ~40 known paths — caches, build artifacts, Docker, Trash | Static `catalog.yaml` | Deterministic, instant, free, and covers most reclaimable bytes |
 | **Classify what the catalog can't name** | **One batched LLM call** | Genuinely semantic: build artifact, cache, or the only copy of something? |
 | **Parse goal and constraints** | **LLM** | *"nothing related to the Rust project"* has no regex |
@@ -100,7 +100,7 @@ The model never sees your file tree — just a few dozen unnamed directories des
 
 **In**
 
-- Threaded filesystem scan, streamed to the UI
+- Filesystem scan, streamed to the UI as it walks
 - Static catalog of known paths and verdicts
 - LLM classification of unknown directories, batched into one call
 - Goal and constraint parsing
@@ -130,7 +130,7 @@ v1 does one thing completely — tell you what's safe to delete and let you act 
 ```
                         ┌──────────────────────────────┐
   local scan  ─────────▶│  scanner/   os.scandir       │
-  (real paths)          │             threaded, streams│
+  (real paths)          │            reports as it goes│
                         └──────────────┬───────────────┘
                                        │  ScanNode
   dragged folder ──────────────────────┤
