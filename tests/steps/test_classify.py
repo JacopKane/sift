@@ -45,9 +45,9 @@ def no_invented_directories(classified: list[Classification], reports: list[Scan
 @then(parsers.parse('"{relpath}" is not regenerable'))
 def not_regenerable(classified: list[Classification], machine: Machine, relpath: str) -> None:
     item = _for(classified, machine, relpath)
-    assert (
-        item.verdict is not Verdict.REGENERABLE
-    ), f"{relpath} was called disposable: {item.reason}"
+    assert item.verdict is not Verdict.REGENERABLE, (
+        f"{relpath} was called disposable: {item.reason}"
+    )
 
 
 @then(parsers.parse('"{relpath}" needs review'))
@@ -68,9 +68,9 @@ def is_irreplaceable(classified: list[Classification], machine: Machine, relpath
 def regenerable_says_how(classified: list[Classification]) -> None:
     for item in classified:
         if item.verdict is Verdict.REGENERABLE:
-            assert (
-                item.restore and item.restore.strip()
-            ), f"{item.path} is called regenerable with no way to get it back"
+            assert item.restore and item.restore.strip(), (
+                f"{item.path} is called regenerable with no way to get it back"
+            )
 
 
 @then("the model was called once")

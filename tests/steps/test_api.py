@@ -66,17 +66,17 @@ def map_shows_verdict(events: list[dict[str, Any]], machine: Machine, relpath: s
     wanted = str(machine.path(relpath))
     node = next((n for n in _chart_nodes(events) if n["path"] == wanted), None)
     assert node is not None, f"{relpath} is not on the map"
-    assert (
-        node["verdict"] is not None
-    ), f"{relpath} was judged but the map shows it as unknown, so it draws in grey"
+    assert node["verdict"] is not None, (
+        f"{relpath} was judged but the map shows it as unknown, so it draws in grey"
+    )
 
 
 @then("the map is not a single colour")
 def map_is_not_one_colour(events: list[dict[str, Any]]) -> None:
     verdicts = {node["verdict"] for node in _chart_nodes(events)}
-    assert (
-        len(verdicts - {None}) > 1
-    ), f"the whole map draws in one colour; verdicts present: {verdicts}"
+    assert len(verdicts - {None}) > 1, (
+        f"the whole map draws in one colour; verdicts present: {verdicts}"
+    )
 
 
 @then("the plan the browser receives accounts for no more than was surveyed")

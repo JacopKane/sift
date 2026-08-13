@@ -53,9 +53,9 @@ def nothing_proposed_contains_protected(plan: Plan) -> None:
             swept_up = {
                 kept for kept in protected if path in kept.parents and kept not in item.excluding
             }
-            assert (
-                not swept_up
-            ), f"reclaiming {path} would delete {swept_up}, which the plan says cannot be replaced"
+            assert not swept_up, (
+                f"reclaiming {path} would delete {swept_up}, which the plan says cannot be replaced"
+            )
 
 
 @then(parsers.parse('the plan has one proposal for "{label}"'))

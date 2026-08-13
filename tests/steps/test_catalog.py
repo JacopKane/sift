@@ -87,9 +87,9 @@ def reports_full_size(reports: list[ScanNode], machine: Machine, relpath: str) -
 @then(parsers.parse('nothing inside "{relpath}" was explored'))
 def nothing_inside_explored(reports: list[ScanNode], machine: Machine, relpath: str) -> None:
     settled = machine.path(relpath)
-    assert not _node(
-        reports, machine, relpath
-    ).children, "a directory the catalog already named needs its total, not its contents"
+    assert not _node(reports, machine, relpath).children, (
+        "a directory the catalog already named needs its total, not its contents"
+    )
     inside = [node for node in reports if settled in node.path.parents]
     assert not inside, f"{len(inside)} nodes were built inside an already-settled directory"
 
@@ -137,9 +137,9 @@ def candidate_leaves_out(
     candidate = _candidate(reports, machine, relpath)
     assert name not in {file.name for file in candidate.largest_files}
     broken_out = _node(reports, machine, f"{relpath}/{name}")
-    assert (
-        candidate.size_bytes < broken_out.size_bytes
-    ), "the remainder should be what is left after the big file, not the whole directory"
+    assert candidate.size_bytes < broken_out.size_bytes, (
+        "the remainder should be what is left after the big file, not the whole directory"
+    )
 
 
 @then(parsers.parse("the model is asked about fewer than {limit:d} directories"))

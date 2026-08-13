@@ -23,9 +23,9 @@ def i_ask_to(reports: list[ScanNode], prompt: str, counter: CallCounter) -> Sele
 
 @then(parsers.parse('the answer selects "{relpath}"'))
 def answer_selects(answer: Selection, machine: Machine, relpath: str) -> None:
-    assert (
-        machine.path(relpath) in answer.paths
-    ), f"{relpath} was not selected; got {[str(p) for p in answer.paths]}"
+    assert machine.path(relpath) in answer.paths, (
+        f"{relpath} was not selected; got {[str(p) for p in answer.paths]}"
+    )
 
 
 @then(parsers.parse('the answer leaves "{relpath}" alone'))
@@ -42,9 +42,9 @@ def selects_nothing_inside(answer: Selection, machine: Machine, relpath: str) ->
 
 @then("the answer says what it refused")
 def answer_says_what_it_refused(answer: Selection) -> None:
-    assert (
-        answer.refused or "protect" in answer.reason.lower()
-    ), "asking for something protected should be acknowledged, not silently dropped"
+    assert answer.refused or "protect" in answer.reason.lower(), (
+        "asking for something protected should be acknowledged, not silently dropped"
+    )
 
 
 @then("the answer gives a reason")
