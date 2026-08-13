@@ -10,12 +10,14 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from sift.ask import ask
 from sift.classify import classify
 from sift.models import Classification, Plan, ScanNode
 from sift.plan import build_plan
@@ -32,8 +34,17 @@ MIN_SHARE = 0.004
 rather than drawn as slivers nobody can click."""
 
 
+class Question(BaseModel):
+    root: str
+    prompt: str
+
+
 def create_app(home: Path | None = None) -> FastAPI:
     app = FastAPI(title="Sift")
+
+    # The last survey per root, so a question can be answered without walking the
+    # disk again. A local single-user tool; nothing here needs a session store.
+    surveyed: dict[str, ScanNode] = {}
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
@@ -41,12 +52,57 @@ def create_app(home: Path | None = None) -> FastAPI:
 
     @app.get("/api/survey")
     async def survey_endpoint(root: str, judge: bool = False) -> EventSourceResponse:
-        return EventSourceResponse(_stream(Path(root).expanduser(), home, judge))
+        return EventSourceResponse(_stream(Path(root).expanduser(), home, judge, surveyed))
+
+    @app.post("/api/ask")
+    async def ask_endpoint(question: Question) -> dict[str, Any]:
+        tree = surveyed.get(str(Path(question.root).expanduser()))
+        if tree is None:
+            raise HTTPException(409, "Survey that folder first, then ask about it.")
+
+        try:
+            selection = ask(tree, question.prompt)
+        except Exception as failure:
+            detail = str(failure)
+            if "RESOURCE_EXHAUSTED" in detail or "429" in detail:
+                raise HTTPException(
+                    429,
+                    "The model is rate limited right now. Wait a minute and ask again.",
+                ) from failure
+            raise HTTPException(502, f"The model could not answer: {detail[:200]}") from failure
+        sizes = _sizes(tree)
+        chosen = [
+            {"path": str(path), "name": path.name, "size_bytes": sizes.get(path, 0)}
+            for path in selection.paths
+        ]
+        chosen.sort(key=lambda item: cast(int, item["size_bytes"]), reverse=True)
+
+        return {
+            "reason": selection.reason,
+            "selected": chosen,
+            "refused": [str(path) for path in selection.refused],
+            "total_bytes": sum(cast(int, item["size_bytes"]) for item in chosen),
+        }
 
     return app
 
 
-def _stream(root: Path, home: Path | None, judge: bool = False) -> Iterator[dict[str, str]]:
+def _sizes(tree: ScanNode) -> dict[Path, int]:
+    found: dict[Path, int] = {}
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        found[node.path] = node.size_bytes
+        stack.extend(node.children)
+    return found
+
+
+def _stream(
+    root: Path,
+    home: Path | None,
+    judge: bool = False,
+    surveyed: dict[str, ScanNode] | None = None,
+) -> Iterator[dict[str, str]]:
     # A whole-volume survey needs the exclusions; a project folder needs none, and
     # applying them anyway costs nothing.
     exclude = boot_volume_exclusions() if root == Path("/") else ()
@@ -58,6 +114,8 @@ def _stream(root: Path, home: Path | None, judge: bool = False) -> Iterator[dict
             yield {"event": "directory", "data": json.dumps(_report(node))}
 
     assert tree is not None  # survey always reports the root last
+    if surveyed is not None:
+        surveyed[str(root)] = tree
 
     judgements: list[Classification] = []
     if judge:

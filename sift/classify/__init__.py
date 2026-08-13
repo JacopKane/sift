@@ -1,3 +1,3 @@
-from sift.classify.classifier import classify
+from sift.classify.classifier import chat_model, classify
 
-__all__ = ["classify"]
+__all__ = ["chat_model", "classify"]

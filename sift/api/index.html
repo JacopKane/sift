@@ -170,6 +170,25 @@
 
   .judge { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
   .judge input { accent-color: var(--regenerable); }
+
+  /* ---- asking ---- */
+
+  .ask { display: none; gap: 8px; margin: 0 0 22px; }
+  .ask.on { display: flex; }
+  .ask input { flex: 1; font-family: var(--sans); }
+  .ask button { background: var(--edge); color: var(--text); }
+  .ask button:hover:not(:disabled) { background: #27324a; }
+
+  .hint { font-size: 12px; color: var(--faint); margin: -14px 0 20px; }
+  .hint b { color: var(--muted); font-weight: 500; cursor: pointer; }
+  .hint b:hover { color: var(--regenerable); }
+
+  .answer { border: 1px solid var(--edge); border-left: 2px solid var(--review); border-radius: 5px; padding: 14px 16px; margin-bottom: 22px; }
+  .answer p { margin: 0 0 10px; color: var(--text); }
+  .answer .total { font-family: var(--mono); color: var(--review); }
+  .answer ol { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+  .answer li { display: list-item; background: none; border: 0; padding: 2px 0; font-family: var(--mono); }
+  .answer .refused { color: var(--irreplaceable); font-size: 12.5px; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -197,6 +216,13 @@
   </section>
 
   <section aria-label="Plan">
+    <form class="ask" id="askform">
+      <input type="text" id="prompt" placeholder="Tell it what to get rid of…" aria-label="What to remove">
+      <button type="submit" id="askgo">Ask</button>
+    </form>
+    <div class="hint" id="hint"></div>
+    <div id="answer"></div>
+
     <div class="totals">
       <div class="safe"><span class="n" id="t-safe">—</span><span class="k">safe to reclaim</span></div>
       <div class="decide"><span class="n" id="t-decide">—</span><span class="k">needs you</span></div>
@@ -331,6 +357,87 @@ function render(plan) {
   plan.protected.forEach(i => prot.appendChild(row(i, 'protected')));
 }
 
+/* ---- asking ---- */
+
+let surveyedRoot = null;
+
+const EXAMPLES = [
+  'remove all the torrent files',
+  'get rid of the disk image installers',
+  'delete the small video files',
+  'clear out anything I downloaded over a year ago',
+];
+
+function showHints() {
+  const hint = $('hint');
+  hint.textContent = 'Try: ';
+  EXAMPLES.forEach((text, i) => {
+    const b = document.createElement('b');
+    b.textContent = text;
+    b.tabIndex = 0;
+    b.addEventListener('click', () => { $('prompt').value = text; $('prompt').focus(); });
+    hint.append(b);
+    if (i < EXAMPLES.length - 1) hint.append(' · ');
+  });
+}
+
+$('askform').addEventListener('submit', async e => {
+  e.preventDefault();
+  const prompt = $('prompt').value.trim();
+  if (!prompt) return;
+
+  $('askgo').disabled = true;
+  const box = $('answer');
+  box.innerHTML = '<div class="answer"><p>Looking…</p></div>';
+
+  try {
+    const res = await fetch('/api/ask', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({root: surveyedRoot, prompt}),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'That did not work.');
+    const d = await res.json();
+
+    box.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'answer';
+
+    const why = document.createElement('p');
+    why.textContent = d.reason;
+    card.append(why);
+
+    if (d.selected.length) {
+      const total = document.createElement('p');
+      total.innerHTML = `<span class="total">${size(d.total_bytes)}</span> across ${d.selected.length} file${d.selected.length > 1 ? 's' : ''}`;
+      card.append(total);
+      const list = document.createElement('ol');
+      for (const f of d.selected) {
+        const li = document.createElement('li');
+        li.textContent = `${size(f.size_bytes).padStart(9)}  ${f.name}`;
+        list.append(li);
+      }
+      card.append(list);
+    }
+
+    if (d.refused.length) {
+      const refused = document.createElement('div');
+      refused.className = 'refused';
+      refused.textContent = `✕ ${d.refused.length} protected path${d.refused.length > 1 ? 's were' : ' was'} left alone.`;
+      card.append(refused);
+    }
+    box.append(card);
+  } catch (err) {
+    box.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'answer';
+    card.textContent = err.message;
+    box.append(card);
+  } finally {
+    $('askgo').disabled = false;
+  }
+});
+
 /* ---- survey ---- */
 
 let stream;
@@ -362,8 +469,11 @@ $('f').addEventListener('submit', e => {
     const d = JSON.parse(ev.data);
     draw(d.chart);
     render(d.plan);
-    $('status').textContent = `${seen} directories surveyed`;
+    $('status').textContent = `${seen.toLocaleString()} directories surveyed`;
     $('go').disabled = false;
+    surveyedRoot = $('root').value;
+    $('askform').classList.add('on');
+    showHints();
     stream.close();
   });
 

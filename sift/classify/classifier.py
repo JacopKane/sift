@@ -69,7 +69,7 @@ def classify(
     if not candidates:
         return []
 
-    model = _chat_model().with_structured_output(_Batch)
+    model = chat_model().with_structured_output(_Batch)
     reply = cast(
         _Batch,
         model.invoke(
@@ -105,9 +105,12 @@ def _of(offered: dict[str, Candidate], path: str, field: str, fallback: Any) -> 
     return getattr(candidate, field) if candidate else fallback
 
 
-def _chat_model() -> BaseChatModel:
+def chat_model() -> BaseChatModel:
     conf = settings()
-    kwargs: dict[str, Any] = {}
+    # The agent loop spends three to six requests answering one question, and the
+    # Gemini free tier allows fifteen a minute. Backing off is the difference
+    # between a pause and a failure.
+    kwargs: dict[str, Any] = {"max_retries": 6}
 
     # Passed explicitly rather than exported to os.environ: the key comes from .env
     # via Settings, and a library reading it back out of the process environment
