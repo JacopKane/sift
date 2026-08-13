@@ -24,6 +24,20 @@ KEYS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _forget_settings() -> Any:
+    """Clear the settings cache on the way out as well as on the way in.
+
+    monkeypatch restores the environment at teardown, but settings() is
+    lru_cached — so without this the fake provider and fake key stay cached for
+    whatever test runs next, which is how these scenarios were quietly breaking
+    the live suite when the whole thing ran together.
+    """
+    config.settings.cache_clear()
+    yield
+    config.settings.cache_clear()
+
+
 @given(parsers.parse('the provider is "{provider}" using "{model}"'))
 def the_provider_is(monkeypatch: pytest.MonkeyPatch, provider: str, model: str) -> None:
     # Every provider gets a distinct fake key, so "was it handed the right one"
