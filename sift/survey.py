@@ -11,7 +11,7 @@ from collections.abc import Collection, Iterator
 from pathlib import Path
 
 from sift.catalog import load_catalog
-from sift.models import Candidate, FileSummary, ScanNode
+from sift.models import Candidate, FileSummary, ScanNode, Verdict
 from sift.scanner import walk
 
 CANDIDATE_LIMIT = 40
@@ -42,14 +42,26 @@ def survey(
 ) -> Iterator[ScanNode]:
     """Report each entry under *root*, carrying a verdict where the catalog knows one.
 
-    A directory the catalog can name is counted but not explored. Its contents are
-    already accounted for by the verdict on the whole, and enumerating them would
-    mean describing every file in every node_modules on the disk to learn nothing.
+    A directory the catalog names as reclaimable is counted but not explored:
+    enumerating every file in every node_modules on the disk teaches nothing that
+    the verdict on the whole has not already said. A directory it names as
+    protected *is* explored, because its contents are the ones somebody may want
+    to look through, override, or find duplicates in.
     """
     catalog = load_catalog(home)
 
     def already_named(path: Path) -> bool:
-        return catalog.recognise(path, is_dir=True) is not None
+        """Skip the contents of what a rule already settles — but not of what it
+        protects.
+
+        Pruning exists because a recognised cache's internals teach you nothing.
+        A protected directory is the opposite case: its contents are exactly what
+        somebody might want to look through, override, or find duplicates in. Not
+        exploring it made "delete the screenshots on my Desktop" answer "those are
+        protected" with no way to proceed.
+        """
+        rule = catalog.recognise(path, is_dir=True)
+        return rule is not None and rule.verdict is not Verdict.IRREPLACEABLE
 
     for node in walk(root, exclude, prune=already_named):
         rule = catalog.recognise(node.path, is_dir=node.is_dir)

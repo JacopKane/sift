@@ -32,6 +32,21 @@ Feature: Asking for what you want in your own words
     And the answer says what it refused
 
   @slow
+  Scenario: Insisting reaches what protection was holding back
+    When I ask to "delete absolutely everything in Documents, I do not care"
+    Then the answer selects nothing
+    And the answer says what it refused
+    When I insist on "delete absolutely everything in Documents, I do not care"
+    Then the answer selects something inside "Documents"
+    And the answer still marks what it selected as protected
+
+  @slow
+  Scenario: Insisting does not turn every request into a free-for-all
+    When I insist on "delete the disk image installers"
+    Then the answer selects "Downloads/installer.dmg"
+    And the answer leaves "Documents/contract-signed.pdf" alone
+
+  @slow
   Scenario: The answer explains itself
     When I ask to "delete the disk image installers"
     Then the answer gives a reason

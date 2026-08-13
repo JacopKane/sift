@@ -2,7 +2,10 @@
 	import { size } from '$lib/format';
 	import type { AskResult } from '$lib/types';
 
-	let { result }: { result: AskResult } = $props();
+	let {
+		result,
+		onBasket
+	}: { result: AskResult; onBasket?: (path: string) => void } = $props();
 </script>
 
 <div
@@ -20,9 +23,25 @@
 		</p>
 		<ol class="mt-1.5 list-decimal pl-5 font-mono text-[12.5px]" style="color: var(--muted)">
 			{#each result.selected as file (file.path)}
-				<li class="break-all py-0.5">{size(file.size_bytes)} · {file.name}</li>
+				<li class="break-all py-0.5">
+					{size(file.size_bytes)} · {file.name}
+					{#if result.protected?.includes(file.path)}
+						<span style="color: var(--irreplaceable)" aria-label="cannot be replaced">✕</span>
+					{/if}
+				</li>
 			{/each}
 		</ol>
+	{/if}
+
+	{#if onBasket && result.selected.length}
+		<button
+			type="button"
+			onclick={() => result.selected.forEach((file) => onBasket?.(file.path))}
+			class="mt-3 rounded-md px-3 py-1.5 text-[13px] font-semibold"
+			style="background: var(--regenerable); color: var(--ground)"
+		>
+			Add all {result.selected.length} to basket
+		</button>
 	{/if}
 
 	{#if result.refused.length}

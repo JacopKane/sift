@@ -37,11 +37,11 @@ Feature: Finding the same thing twice
     Then the reclaimable copy is not the oldest one
     And what could be reclaimed is the size of one copy, not both
 
-  Scenario: A protected folder is counted, so its contents cannot be compared
+  Scenario: A copy hiding in a protected folder is still found
     Given a file "Downloads/report.pdf" holding "quarterly numbers"
     And a file "Documents/report-final.pdf" holding "quarterly numbers"
     When I look for duplicates
-    Then "Documents/report-final.pdf" is not a duplicate of either
+    Then "Downloads/report.pdf" and "Documents/report-final.pdf" are the same file
 
   Scenario: A version chain is reported as one decision
     Given a file "Downloads/NDA_v1.docx" holding "first draft"

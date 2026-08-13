@@ -24,6 +24,7 @@ export type AskResult = {
 	reason: string;
 	selected: { path: string; name: string; size_bytes: number }[];
 	refused: string[];
+	protected: string[];
 	total_bytes: number;
 };
 

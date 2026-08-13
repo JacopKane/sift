@@ -71,7 +71,15 @@
 
 	async function ask(event: SubmitEvent) {
 		event.preventDefault();
-		if (!prompt.trim()) return;
+		await run(prompt, false);
+	}
+
+	async function insist() {
+		await run(prompt, true);
+	}
+
+	async function run(question: string, override: boolean) {
+		if (!question.trim()) return;
 		asking = true;
 		askError = '';
 		answer = null;
@@ -79,7 +87,7 @@
 			const res = await fetch('/api/ask', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ root: surveyedRoot, prompt })
+				body: JSON.stringify({ root: surveyedRoot, prompt: question, override })
 			});
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.detail ?? 'That did not work.');
@@ -258,7 +266,22 @@
 		{/if}
 
 		{#if answer}
-			<Answer result={answer} />
+			<Answer result={answer} onBasket={(path) => addToBasket(path, true)} />
+
+			{#if !answer.selected.length && answer.reason.toLowerCase().includes('protect')}
+				<p class="mb-5 text-[12.5px]" style="color: var(--muted)">
+					Those are protected. It is your disk — you can insist, and they will still go to
+					quarantine rather than be deleted.
+					<button
+						type="button"
+						onclick={insist}
+						class="ml-1 rounded border px-2 py-0.5 text-xs"
+						style="border-color: var(--irreplaceable); color: var(--irreplaceable)"
+					>
+						I mean it — include protected
+					</button>
+				</p>
+			{/if}
 		{/if}
 
 		{#if notice}

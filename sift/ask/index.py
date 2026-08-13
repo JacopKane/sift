@@ -33,6 +33,7 @@ class Index:
         name_contains: str | None = None,
         path_contains: str | None = None,
         limit: int = 60,
+        include_protected: bool = False,
     ) -> dict[str, object]:
         """Matching files, with protected ones counted rather than silently dropped.
 
@@ -54,7 +55,13 @@ class Index:
             # matches nothing, and reports "there is no such folder" — which is false.
             and (path_contains is None or path_contains.lower() in str(node.path).lower())
         ]
-        allowed = [node for node in matched if not self.is_protected(node.path)]
+        # When the person has insisted, protection stops being a filter and becomes
+        # a label. They still see which of these cannot be replaced.
+        allowed = (
+            list(matched)
+            if include_protected
+            else [node for node in matched if not self.is_protected(node.path)]
+        )
         withheld = len(matched) - len(allowed)
         allowed.sort(key=lambda node: node.size_bytes, reverse=True)
 

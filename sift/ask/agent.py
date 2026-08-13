@@ -60,9 +60,23 @@ class Selection(BaseModel):
     refused: list[Path] = Field(default_factory=list)
     """Asked for, but protected. Withheld here rather than silently dropped."""
 
+    protected: list[Path] = Field(default_factory=list)
+    """Selected, but only because the person insisted. Still cannot be replaced,
+    and the interface has to keep saying so."""
 
-def ask(tree: ScanNode, prompt: str, config: RunnableConfig | None = None) -> Selection:
-    """Answer *prompt* against a completed survey."""
+
+def ask(
+    tree: ScanNode,
+    prompt: str,
+    config: RunnableConfig | None = None,
+    override: bool = False,
+) -> Selection:
+    """Answer *prompt* against a completed survey.
+
+    With *override* the protected files are returned rather than withheld. The
+    refusal was a warning, not a lock — refusing outright is how a tool gets
+    routed around with rm, which has no undo. What comes back is still labelled.
+    """
     index = Index(tree)
 
     @tool
@@ -85,7 +99,14 @@ def ask(tree: ScanNode, prompt: str, config: RunnableConfig | None = None) -> Se
         e.g. path_contains='Documents'. Returns the files you may select, plus a
         count of any that matched but are protected.
         """
-        return index.find(extensions, min_bytes, max_bytes, name_contains, path_contains)
+        return index.find(
+            extensions,
+            min_bytes,
+            max_bytes,
+            name_contains,
+            path_contains,
+            include_protected=override,
+        )
 
     agent = create_agent(
         chat_model(),
@@ -101,10 +122,12 @@ def ask(tree: ScanNode, prompt: str, config: RunnableConfig | None = None) -> Se
     # Protection is enforced here, not in the prompt. A model that is asked
     # forcefully enough will do what it is told; this cannot.
     chosen = [Path(path) for path in answer.paths]
-    refused = [path for path in chosen if index.is_protected(path)]
+    guarded = [path for path in chosen if index.is_protected(path)]
 
+    if override:
+        return Selection(paths=chosen, reason=answer.reason, protected=guarded)
     return Selection(
-        paths=[path for path in chosen if path not in refused],
+        paths=[path for path in chosen if path not in guarded],
         reason=answer.reason,
-        refused=refused,
+        refused=guarded,
     )

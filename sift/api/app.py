@@ -48,6 +48,7 @@ rather than drawn as slivers nobody can click."""
 class Question(BaseModel):
     root: str
     prompt: str
+    override: bool = False
 
 
 class Basketed(BaseModel):
@@ -99,7 +100,7 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
             raise HTTPException(409, "Survey that folder first, then ask about it.")
 
         try:
-            selection = ask(tree, question.prompt)
+            selection = ask(tree, question.prompt, override=question.override)
         except Exception as failure:
             detail = str(failure)
             if "RESOURCE_EXHAUSTED" in detail or "429" in detail:
@@ -119,6 +120,7 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
             "reason": selection.reason,
             "selected": chosen,
             "refused": [str(path) for path in selection.refused],
+            "protected": [str(path) for path in selection.protected],
             "total_bytes": sum(cast(int, item["size_bytes"]) for item in chosen),
         }
 

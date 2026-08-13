@@ -21,6 +21,28 @@ def i_ask_to(reports: list[ScanNode], prompt: str, counter: CallCounter) -> Sele
     return ask(tree_of(reports), prompt, config={"callbacks": [counter]})
 
 
+@when(parsers.parse('I insist on "{prompt}"'), target_fixture="answer")
+def i_insist_on(reports: list[ScanNode], prompt: str, counter: CallCounter) -> Selection:
+    if not settings().api_key:
+        pytest.skip(f"no API key configured for provider {settings().provider}")
+    return ask(tree_of(reports), prompt, config={"callbacks": [counter]}, override=True)
+
+
+@then(parsers.parse('the answer selects something inside "{relpath}"'))
+def selects_something_inside(answer: Selection, machine: Machine, relpath: str) -> None:
+    boundary = machine.path(relpath)
+    inside = [p for p in answer.paths if boundary == p or boundary in p.parents]
+    assert inside, f"insisting should reach inside {relpath}; got {answer.paths}"
+
+
+@then("the answer still marks what it selected as protected")
+def still_marked_protected(answer: Selection) -> None:
+    assert answer.protected, (
+        "overriding must not erase the label — the person still needs to know "
+        "these cannot be replaced"
+    )
+
+
 @then(parsers.parse('the answer selects "{relpath}"'))
 def answer_selects(answer: Selection, machine: Machine, relpath: str) -> None:
     assert machine.path(relpath) in answer.paths, (
