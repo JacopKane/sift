@@ -82,7 +82,7 @@ class Index:
             ],
             "withheld_because_protected": withheld,
             "protected_directories_matched": aimed_at,
-            "note": _note(aimed_at, withheld),
+            "note": _note(aimed_at, withheld, include_protected),
         }
 
     def summary(self) -> dict[str, object]:
@@ -104,8 +104,16 @@ class Index:
         }
 
 
-def _note(directories: list[str], files: int) -> str:
+def _note(directories: list[str], files: int, overridden: bool = False) -> str:
     """What to tell the model about anything it matched but may not have."""
+    if overridden:
+        # The person has already been warned and said go ahead. Repeating the
+        # warning here is how the agent talks itself back out of doing as asked.
+        return (
+            "The person has overridden protection for this request. Protected files "
+            "ARE included above and you may select them. Note in your reason that "
+            "they cannot be replaced."
+        )
     off_limits = [*directories]
     if files:
         off_limits.append(f"{files} file(s)")

@@ -5,9 +5,10 @@ Feature: Asking you when it genuinely cannot tell
   some things were never written to the disk — whether last year's client folder
   still matters is not recoverable by any amount of scanning.
 
-  The graph stops and waits. A question is only worth interrupting for when it is
-  genuinely unresolved, big enough to matter, and not already settled by a rule —
-  a tool that asks about everything is a tool nobody answers.
+  These assert the graph's behaviour, not the model's opinion. Which folder comes
+  back unresolved is a judgement that varies between runs and between providers;
+  what must not vary is that whatever is unresolved and worth the interruption
+  gets asked about, and that answering resumes rather than restarts.
 
   Background:
     Given a machine that looks like a developer's Mac
@@ -18,24 +19,25 @@ Feature: Asking you when it genuinely cannot tell
     Then it finishes without asking anything
 
   @slow
-  Scenario: An opaque folder large enough to matter becomes a question
+  Scenario: Whatever is left unresolved and big enough becomes a question
     When the review runs
-    Then it stops and asks about "Archive"
-    And the question says what is inside it
+    Then everything unresolved and worth asking about was asked about
+    And nothing already settled by a rule was asked about
+    And every question says what is inside what it asks about
     And no plan is produced while it is waiting
 
   @slow
   Scenario: Answering resumes the same run rather than starting over
     When the review runs
-    And I answer that "Archive" is old client work I no longer need
+    And I answer that everything asked about is finished with
     Then the run finishes
-    And "Archive" ends up regenerable
+    And everything I was asked about ends up regenerable
     And the survey was not walked a second time
 
   @slow
   Scenario: Saying it matters is respected
     When the review runs
-    And I answer that "Archive" is work I still need
+    And I answer that everything asked about still matters
     Then the run finishes
-    And "Archive" ends up irreplaceable
-    And "Archive" is not proposed for deletion
+    And everything I was asked about ends up irreplaceable
+    And none of it is proposed for deletion

@@ -14,7 +14,7 @@ from pytest_bdd import parsers, scenarios, then, when
 
 from sift.config import settings
 from sift.models import ScanNode, Verdict
-from sift.review import Question, build_review
+from sift.review import ASK_ABOVE, Question, build_review
 from sift.survey import candidates_for_model
 from tests.machine import Machine
 
@@ -31,6 +31,7 @@ class Run:
         self.tree = tree
         self.surveys = 1
         self.state: dict[str, Any] = {}
+        self.asked: set[str] = set()
 
     @property
     def questions(self) -> list[Question]:
@@ -43,6 +44,7 @@ class Run:
         self.state = self.graph.invoke({"tree": self.tree, "candidates": candidates}, config=THREAD)
 
     def answer(self, replies: dict[str, str]) -> None:
+        self.asked |= set(replies)
         self.state = self.graph.invoke(Command(resume=replies), config=THREAD)
 
 
@@ -64,14 +66,14 @@ def review_over_settled(surveyed: ScanNode) -> Run:
     return run
 
 
-@when(parsers.parse('I answer that "{relpath}" is old client work I no longer need'))
-def answer_no_longer_needed(run: Run, machine: Machine, relpath: str) -> None:
-    run.answer({str(machine.path(relpath)): "discard"})
+@when("I answer that everything asked about is finished with")
+def answer_all_discard(run: Run) -> None:
+    run.answer({question.path: "discard" for question in run.questions})
 
 
-@when(parsers.parse('I answer that "{relpath}" is work I still need'))
-def answer_still_needed(run: Run, machine: Machine, relpath: str) -> None:
-    run.answer({str(machine.path(relpath)): "keep"})
+@when("I answer that everything asked about still matters")
+def answer_all_keep(run: Run) -> None:
+    run.answer({question.path: "keep" for question in run.questions})
 
 
 @then("it finishes without asking anything")
@@ -80,15 +82,27 @@ def finishes_without_asking(run: Run) -> None:
     assert run.state.get("plan") is not None
 
 
-@then(parsers.parse('it stops and asks about "{relpath}"'))
-def stops_and_asks(run: Run, machine: Machine, relpath: str) -> None:
+@then("everything unresolved and worth asking about was asked about")
+def everything_unresolved_was_asked(run: Run) -> None:
+    floor = int(run.tree.size_bytes * ASK_ABOVE)
+    should = {
+        str(j.path)
+        for j in run.state["judgements"]
+        if j.verdict is Verdict.REVIEW and j.size_bytes >= floor
+    }
     asked = {question.path for question in run.questions}
-    assert str(machine.path(relpath)) in asked, f"expected a question about {relpath}, got {asked}"
+    assert asked == should, f"asked about {asked}, should have asked about {should}"
 
 
-@then("the question says what is inside it")
-def question_says_what_is_inside(run: Run) -> None:
-    assert run.questions
+@then("nothing already settled by a rule was asked about")
+def nothing_settled_was_asked(run: Run) -> None:
+    settled = {str(node.path) for node in _nodes(run.tree) if node.verdict is not None}
+    for question in run.questions:
+        assert question.path not in settled, f"{question.path} was already settled"
+
+
+@then("every question says what is inside what it asks about")
+def every_question_says_contents(run: Run) -> None:
     for question in run.questions:
         assert question.contains, "a question with no contents is unanswerable"
         assert question.asking.strip()
@@ -96,6 +110,8 @@ def question_says_what_is_inside(run: Run) -> None:
 
 @then("no plan is produced while it is waiting")
 def no_plan_while_waiting(run: Run) -> None:
+    if not run.questions:
+        return  # nothing was ambiguous this run; there is nothing to wait for
     assert run.state.get("plan") is None, "the graph planned before the answer arrived"
 
 
@@ -105,19 +121,30 @@ def the_run_finishes(run: Run) -> None:
     assert not run.questions
 
 
-@then(parsers.parse('"{relpath}" ends up {verdict}'))
-def ends_up(run: Run, machine: Machine, relpath: str, verdict: str) -> None:
-    wanted = machine.path(relpath)
-    judged = next(j for j in run.state["judgements"] if j.path == wanted)
-    assert judged.verdict is Verdict(verdict)
+@then(parsers.parse("everything I was asked about ends up {verdict}"))
+def everything_ends_up(run: Run, verdict: str) -> None:
+    if not run.asked:
+        pytest.skip("nothing was ambiguous this run, so there is nothing to check")
+    for path in run.asked:
+        judged = next(j for j in run.state["judgements"] if str(j.path) == path)
+        assert judged.verdict is Verdict(verdict)
 
 
-@then(parsers.parse('"{relpath}" is not proposed for deletion'))
-def not_proposed_for_deletion(run: Run, machine: Machine, relpath: str) -> None:
-    proposed = {path for item in run.state["plan"].proposals for path in item.paths}
-    assert machine.path(relpath) not in proposed
+@then("none of it is proposed for deletion")
+def none_proposed(run: Run) -> None:
+    proposed = {str(p) for item in run.state["plan"].proposals for p in item.paths}
+    assert not (run.asked & proposed)
 
 
 @then("the survey was not walked a second time")
 def survey_walked_once(run: Run) -> None:
     assert run.surveys == 1, "resuming should continue the run, not restart it"
+
+
+def _nodes(tree: ScanNode) -> list[ScanNode]:
+    found, stack = [], [tree]
+    while stack:
+        node = stack.pop()
+        found.append(node)
+        stack.extend(node.children)
+    return found

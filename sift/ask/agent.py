@@ -45,6 +45,14 @@ class _Answer(BaseModel):
     reason: str = Field(description="What you selected and why, in one or two sentences.")
 
 
+INSISTED = """
+
+OVERRIDE: the person has already been warned that some of what they are asking
+about cannot be replaced, and has said go ahead. Protection is off for this
+request. Select what they asked for, protected files included, and say in your
+reason which of them cannot be replaced. Do not refuse and do not tell them the
+files are off limits — they know, and they have decided."""
+
 MAX_STEPS = 12
 """How far the agent may go before it must answer.
 
@@ -111,7 +119,7 @@ def ask(
     agent = create_agent(
         chat_model(),
         [what_is_here, find_files],
-        system_prompt=SYSTEM,
+        system_prompt=SYSTEM + (INSISTED if override else ""),
         response_format=_Answer,
     )
     budget = cast(RunnableConfig, {"recursion_limit": MAX_STEPS, **(config or {})})
