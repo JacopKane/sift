@@ -49,15 +49,25 @@ class Basket:
         self._items.clear()
 
     def empty_into(self, quarantine: Quarantine) -> Receipt:
-        """Move everything in the basket aside, and forget it."""
+        """Move everything in the basket aside, and forget it.
+
+        One item failing must not strand the rest. A basket of sixty screenshots
+        that stops at the eleventh because one had already been moved leaves the
+        person with a half-done job and no idea which half — so each is attempted
+        on its own and whatever refused is reported.
+        """
         moved, freed, refused = [], 0, []
         for item in self.items:
-            outcome = quarantine.reclaim(
-                item.path,
-                verdict=item.verdict,
-                excluding=item.excluding,
-                override=item.overridden,
-            )
+            try:
+                outcome = quarantine.reclaim(
+                    item.path,
+                    verdict=item.verdict,
+                    excluding=item.excluding,
+                    override=item.overridden,
+                )
+            except (Protected, OSError) as failure:
+                refused.append(f"{item.path}: {failure}")
+                continue
             moved.extend(outcome.moved)
             freed += outcome.freed_bytes
             refused.extend(outcome.refused)
@@ -67,16 +77,29 @@ class Basket:
 
 
 def item_for(tree: ScanNode, path: Path, *, overridden: bool = False) -> Item:
-    """Build a basket item from what the survey already knows about *path*."""
-    stack = [tree]
+    """Build a basket item from what the survey already knows about *path*.
+
+    Protection is inherited. A screenshot inside ~/Desktop carries no verdict of
+    its own — the catalog names directories, not files — so reading only the
+    node's own verdict let every file inside a protected folder be basketed and
+    reclaimed with no warning at all. The nearest verdict above it is the answer.
+    """
+    inherited: Verdict | None = None
+    stack: list[tuple[ScanNode, Verdict | None]] = [(tree, tree.verdict)]
+
     while stack:
-        node = stack.pop()
+        node, above = stack.pop()
         if node.path == path:
             return Item(
                 path=path,
                 size_bytes=node.size_bytes,
-                verdict=node.verdict,
+                verdict=node.verdict or above,
                 overridden=overridden,
             )
-        stack.extend(node.children)
+        # Only irreplaceable is inherited: "this cache rebuilds itself" says
+        # nothing about a particular file inside it, but "never delete this" does.
+        carried = node.verdict if node.verdict is Verdict.IRREPLACEABLE else above
+        stack.extend((child, carried) for child in node.children)
+
+    _ = inherited
     raise KeyError(f"{path} was not in the survey")

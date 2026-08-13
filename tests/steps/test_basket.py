@@ -44,6 +44,26 @@ def i_empty_the_basket(basket: Basket, held: Quarantine) -> Receipt:
     return basket.empty_into(held)
 
 
+@when("something in the basket disappears before it is emptied")
+def something_disappears(basket: Basket, machine: Machine) -> None:
+    # A file moved or deleted by something else between choosing it and acting on
+    # it. Rare, and exactly when a half-finished job hurts most.
+    import shutil
+
+    shutil.rmtree(machine.path("Library/Caches"))
+
+
+@then("everything that could move did")
+def everything_that_could_moved(receipt: Receipt, machine: Machine) -> None:
+    assert receipt.moved, "one failure stopped the whole basket"
+    assert not machine.path("Sites/client-app/node_modules").exists()
+
+
+@then("the receipt says what could not")
+def receipt_says_what_could_not(receipt: Receipt) -> None:
+    assert receipt.refused, "a silent partial success is worse than a reported failure"
+
+
 @then(parsers.parse('it warns that "{relpath}" cannot be replaced'))
 def it_warns(warning: Exception | None, relpath: str) -> None:
     assert isinstance(warning, Protected)

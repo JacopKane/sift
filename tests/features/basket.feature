@@ -37,6 +37,24 @@ Feature: Deciding for yourself what goes
     Then "Documents" is back where it was
     And it still holds everything it held before
 
+  Scenario: A file inside a protected folder is protected too
+    When I try to put "Documents/contract-signed.pdf" in the basket
+    Then it warns that "contract-signed.pdf" cannot be replaced
+    And "Documents/contract-signed.pdf" is back where it was
+
+  Scenario: Insisting on a file inside a protected folder is recorded as overridden
+    When I insist on putting "Documents/contract-signed.pdf" in the basket
+    And I empty the basket
+    Then the receipt records that it was overridden
+
+  Scenario: One item that cannot move does not strand the rest
+    When I put "Sites/client-app/node_modules" in the basket
+    And I put "Library/Caches" in the basket
+    And something in the basket disappears before it is emptied
+    And I empty the basket
+    Then everything that could move did
+    And the receipt says what could not
+
   Scenario: A basket of several goes in one go
     When I put "Sites/client-app/node_modules" in the basket
     And I put "Library/Caches" in the basket

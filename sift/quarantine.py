@@ -56,6 +56,7 @@ class Quarantine:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
+        self._entries: list[Reclaimed] | None = None
 
     @property
     def manifest_path(self) -> Path:
@@ -110,8 +111,16 @@ class Quarantine:
             at=datetime.now(UTC).isoformat(),
             overridden=forced,
         )
-        self._record([*self.held(), entry])
+        # The slot is already claimed on disk by the move itself, so the manifest
+        # is the only thing that needs appending. Re-reading it per item turned a
+        # basket of sixty into sixty read-and-rewrite cycles of a growing file.
+        self._record([*self._cached(), entry])
         return Receipt(moved=[entry], freed_bytes=entry.size_bytes)
+
+    def _cached(self) -> list[Reclaimed]:
+        if self._entries is None:
+            self._entries = self.held()
+        return self._entries
 
     def undo(self) -> Receipt:
         """Put everything back where it came from, newest first."""
@@ -126,6 +135,7 @@ class Quarantine:
             restored.append(entry)
 
         self._record([])
+        self._entries = []
         return Receipt(moved=restored, freed_bytes=0)
 
     def _free_slot(self, path: Path) -> Path:
@@ -134,14 +144,14 @@ class Quarantine:
         Two directories can share a name — every node_modules does — so the slot
         is numbered rather than named after the source.
         """
-        taken = {entry.held_at for entry in self.held()}
         for index in range(10_000):
             slot = self.root / f"{index:04d}-{path.name}"
-            if slot not in taken and not slot.exists():
+            if not slot.exists():
                 return slot
         raise RuntimeError("quarantine is full; empty it before reclaiming more")
 
     def _record(self, entries: list[Reclaimed]) -> None:
+        self._entries = list(entries)
         self.manifest_path.write_text(
             json.dumps([entry.model_dump(mode="json") for entry in entries], indent=2),
             encoding="utf-8",
