@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from collections import deque
 from collections.abc import Callable, Collection, Generator, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sift.models import ScanNode
@@ -121,14 +122,71 @@ def _walk_dir(
     return node
 
 
+WORKERS = min(16, (os.cpu_count() or 4) * 2)
+"""Threads used to total a pruned subtree.
+
+More than cores because this is I/O bound, not CPU bound: every worker spends its
+time blocked in stat, and the GIL is released for the duration of the syscall. On
+a 1.5M-file projects folder the walk was 95s single-threaded, and syscalls rather
+than object construction were the cost.
+"""
+
+_PARALLEL_FROM = 64
+"""Below this many subdirectories a thread pool costs more than it saves."""
+
+
 def _measure(path: Path) -> tuple[int, int]:
     """Total a subtree without building anything.
 
     Strings rather than Path objects, and no model construction: this runs over
     the parts of a disk nobody needs described, only counted.
     """
+    roots = _immediate_dirs(str(path))
+    size, allocated = _measure_files(str(path))
+
+    if len(roots) < _PARALLEL_FROM:
+        for root in roots:
+            counted, occupied = _measure_serial(root)
+            size += counted
+            allocated += occupied
+        return size, allocated
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for counted, occupied in pool.map(_measure_serial, roots):
+            size += counted
+            allocated += occupied
+
+    return size, allocated
+
+
+def _immediate_dirs(path: str) -> list[str]:
+    try:
+        return [
+            entry.path for entry in os.scandir(path) if entry.is_dir() and not entry.is_symlink()
+        ]
+    except PermissionError:
+        return []
+
+
+def _measure_files(path: str) -> tuple[int, int]:
+    """Files directly in *path*, ignoring its subdirectories."""
     size = allocated = 0
-    stack = [str(path)]
+    try:
+        entries = list(os.scandir(path))
+    except PermissionError:
+        return 0, 0
+    for entry in entries:
+        if entry.is_symlink() or entry.is_dir():
+            continue
+        stat = entry.stat(follow_symlinks=False)
+        size += stat.st_size
+        allocated += stat.st_blocks * _BLOCK_SIZE
+    return size, allocated
+
+
+def _measure_serial(path: str) -> tuple[int, int]:
+    size = allocated = 0
+    stack = [path]
 
     while stack:
         try:

@@ -32,6 +32,10 @@ class Reclaimed(BaseModel):
     size_bytes: int
     at: str
 
+    overridden: bool = False
+    """True when this was protected and reclaimed anyway. Recorded because the
+    person deserves to see, on the receipt, which of these they forced."""
+
 
 class Receipt(BaseModel):
     moved: list[Reclaimed] = Field(default_factory=list)
@@ -40,8 +44,12 @@ class Receipt(BaseModel):
 
 
 class Protected(Exception):
-    """Raised rather than returned. Reclaiming something protected is a bug in the
-    caller, not a condition to branch on."""
+    """Raised when something protected is reclaimed without insisting.
+
+    A refusal, not a prohibition. Pass ``override=True`` and it goes: it is the
+    user's disk, and a tool that simply says no is a tool they route around —
+    usually with rm, which has no undo.
+    """
 
 
 class Quarantine:
@@ -65,10 +73,17 @@ class Quarantine:
         *,
         verdict: Verdict | None = None,
         excluding: list[Path] | None = None,
+        override: bool = False,
     ) -> Receipt:
-        """Move *path* aside, leaving anything in *excluding* where it is."""
-        if verdict is Verdict.IRREPLACEABLE:
-            raise Protected(f"{path} is marked irreplaceable and is never reclaimed")
+        """Move *path* aside, leaving anything in *excluding* where it is.
+
+        Something marked irreplaceable is refused unless *override* is set. The
+        refusal is the warning; the override is the person overruling it, which
+        they are entitled to do.
+        """
+        forced = verdict is Verdict.IRREPLACEABLE
+        if forced and not override:
+            raise Protected(f"{path} cannot be replaced if you delete it")
         if not path.exists():
             return Receipt(refused=[f"{path} is not there"])
 
@@ -93,6 +108,7 @@ class Quarantine:
             held_at=held_at,
             size_bytes=_size_of(held_at),
             at=datetime.now(UTC).isoformat(),
+            overridden=forced,
         )
         self._record([*self.held(), entry])
         return Receipt(moved=[entry], freed_bytes=entry.size_bytes)

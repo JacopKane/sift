@@ -253,4 +253,4 @@ pytest -m "not slow"   # fast suite, matches the pre-commit hook
 
 ## License
 
-All rights reserved. This repository is public for reading; it is not open source and no license to use, modify, or distribute is granted.
+MIT — use it, change it, ship it. The licence asks one thing in return: keep the copyright line, so credit travels with the code. See [LICENSE](LICENSE).
