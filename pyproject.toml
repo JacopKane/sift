@@ -18,6 +18,9 @@ dependencies = [
     "langchain-anthropic>=1.5.6",
 ]
 
+[project.scripts]
+sift = "sift.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",

@@ -80,11 +80,22 @@ class Machine:
         return self.root / relpath
 
 
+def _filler(relpath: str, size: int) -> bytes:
+    """Distinct bytes per file, deterministically.
+
+    Writing zeros everywhere would make any two files of equal size genuinely
+    byte-identical, so duplicate detection would find pairs the fixture never
+    meant to create. Real files differ; so do these.
+    """
+    seed = relpath.encode()
+    return (seed * (size // len(seed) + 1))[:size]
+
+
 def build(root: Path) -> Machine:
     for relpath, size in FILES.items():
         target = root / relpath
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(b"\0" * size)
+        target.write_bytes(_filler(relpath, size))
 
     locked = root / LOCKED
     locked.mkdir(parents=True, exist_ok=True)
