@@ -45,6 +45,15 @@ class _Answer(BaseModel):
     reason: str = Field(description="What you selected and why, in one or two sentences.")
 
 
+MAX_STEPS = 12
+"""How far the agent may go before it must answer.
+
+A ReAct loop spends roughly two steps per tool round, so this allows about five
+rounds — enough to look, narrow down, and decide. Without a cap the agent keeps
+searching when the honest answer is "nothing matches", and one question can cost
+a hundred requests."""
+
+
 class Selection(BaseModel):
     paths: list[Path]
     reason: str
@@ -84,7 +93,8 @@ def ask(tree: ScanNode, prompt: str, config: RunnableConfig | None = None) -> Se
         system_prompt=SYSTEM,
         response_format=_Answer,
     )
-    raw = agent.invoke({"messages": [HumanMessage(content=prompt)]}, config=config)
+    budget = cast(RunnableConfig, {"recursion_limit": MAX_STEPS, **(config or {})})
+    raw = agent.invoke({"messages": [HumanMessage(content=prompt)]}, config=budget)
     result = cast(dict[str, Any], raw)
     answer = cast(_Answer, result["structured_response"])
 

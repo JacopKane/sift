@@ -35,3 +35,14 @@ Feature: Asking for what you want in your own words
   Scenario: The answer explains itself
     When I ask to "delete the disk image installers"
     Then the answer gives a reason
+
+  @slow
+  Scenario: A question costs a handful of requests, not a hundred
+    When I ask to "delete the disk image installers"
+    Then it took no more than 8 model calls
+
+  @slow
+  Scenario: A question with no answer stops instead of searching forever
+    When I ask to "delete all the PowerPoint presentations"
+    Then the answer selects nothing
+    And it took no more than 8 model calls

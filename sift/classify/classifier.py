@@ -124,7 +124,11 @@ def _limiter() -> InMemoryRateLimiter:
 
 def chat_model() -> BaseChatModel:
     conf = settings()
-    kwargs: dict[str, Any] = {"max_retries": 6, "rate_limiter": _limiter()}
+    # Two, not six. Retries multiply against the agent's step limit: at six, one
+    # question could issue seven attempts per step across a dozen steps before
+    # giving up. Pacing is what prevents rate limits; retrying is only the
+    # fallback when pacing was not enough.
+    kwargs: dict[str, Any] = {"max_retries": 2, "rate_limiter": _limiter()}
 
     # Passed explicitly rather than exported to os.environ: the key comes from .env
     # via Settings, and a library reading it back out of the process environment

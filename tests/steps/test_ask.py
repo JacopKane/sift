@@ -9,16 +9,16 @@ from sift.ask import Selection, ask
 from sift.config import settings
 from sift.models import ScanNode
 from tests.machine import Machine
-from tests.steps.conftest import tree_of
+from tests.steps.conftest import CallCounter, tree_of
 
 scenarios("ask.feature")
 
 
 @when(parsers.parse('I ask to "{prompt}"'), target_fixture="answer")
-def i_ask_to(reports: list[ScanNode], prompt: str) -> Selection:
+def i_ask_to(reports: list[ScanNode], prompt: str, counter: CallCounter) -> Selection:
     if not settings().api_key:
         pytest.skip(f"no API key configured for provider {settings().provider}")
-    return ask(tree_of(reports), prompt)
+    return ask(tree_of(reports), prompt, config={"callbacks": [counter]})
 
 
 @then(parsers.parse('the answer selects "{relpath}"'))
@@ -50,3 +50,16 @@ def answer_says_what_it_refused(answer: Selection) -> None:
 @then("the answer gives a reason")
 def answer_gives_a_reason(answer: Selection) -> None:
     assert answer.reason.strip()
+
+
+@then("the answer selects nothing")
+def answer_selects_nothing(answer: Selection) -> None:
+    assert not answer.paths, f"nothing here matches, yet it chose {answer.paths}"
+
+
+@then(parsers.parse("it took no more than {limit:d} model calls"))
+def took_no_more_than(answer: Selection, counter: CallCounter, limit: int) -> None:
+    # Cost is a property worth failing over. An uncapped agent kept searching for
+    # something that was not there and spent minutes and hundreds of requests
+    # doing it.
+    assert counter.calls <= limit, f"one question cost {counter.calls} model calls"
