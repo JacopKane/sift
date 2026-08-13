@@ -26,7 +26,8 @@ want removed in ordinary words.
 Work it out from the survey rather than guessing:
 
 - Look before you answer. Use what_is_here to see what the disk actually holds, and
-  find_files to pull the specific ones.
+  find_files to pull the specific ones. To search inside a named folder, use
+  path_contains rather than name_contains — a folder's name is not in its files' names.
 - Vague words are settled against the data, not against a fixed number. "Big" on a
   disk whose largest file is 40 MB means something different from "big" on one with
   a 5 GB video. Look first, then decide where the line falls.
@@ -66,13 +67,16 @@ def ask(tree: ScanNode, prompt: str, config: RunnableConfig | None = None) -> Se
         min_bytes: int | None = None,
         max_bytes: int | None = None,
         name_contains: str | None = None,
+        path_contains: str | None = None,
     ) -> dict[str, object]:
         """Find files in the survey, largest first.
 
-        extensions are like ['.mp4', '.mov']. Sizes are in bytes. Returns the files
-        you may select, plus a count of any that matched but are protected.
+        extensions are like ['.mp4', '.mov']. Sizes are in bytes. name_contains
+        matches the file's own name; use path_contains to search inside a folder,
+        e.g. path_contains='Documents'. Returns the files you may select, plus a
+        count of any that matched but are protected.
         """
-        return index.find(extensions, min_bytes, max_bytes, name_contains)
+        return index.find(extensions, min_bytes, max_bytes, name_contains, path_contains)
 
     agent = create_agent(
         chat_model(),

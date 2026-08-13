@@ -43,6 +43,11 @@ Feature: Serving a survey to a browser
     Then the map shows a verdict for "Downloads"
     And the map is not a single colour
 
+  @slow
+  Scenario: Colouring the map does not make the plan count anything twice
+    When the browser surveys the machine and asks the model
+    Then the plan the browser receives accounts for no more than was surveyed
+
   Scenario: The app serves a page
     When the browser opens the app
     Then it receives an HTML page

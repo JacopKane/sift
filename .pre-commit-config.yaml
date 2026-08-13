@@ -4,6 +4,11 @@
 # Commit  -> format, lint, types, fast tests
 # Push    -> the full suite, including slow filesystem scenarios
 
+# Generated frontend bundles are committed so a fresh clone runs without npm.
+# Formatting hooks must not touch them — rewriting minified JS is at best noise
+# and at worst corruption.
+exclude: '^sift/api/static/'
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

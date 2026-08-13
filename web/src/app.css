@@ -1,0 +1,83 @@
+@import 'tailwindcss';
+
+/*
+  Verdicts read as what recovery costs, not as traffic lights. Mint flows back on
+  its own, amber is unresolved, and irreplaceable is a warm bone rather than red —
+  red would say "danger" about the files you most want to keep.
+
+  Every verdict also carries a glyph, so the distinction survives colour blindness,
+  greyscale printing, and a bad monitor.
+*/
+
+@theme {
+	--font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@layer base {
+	:root {
+		--ground: oklch(0.985 0.003 250);
+		--surface: oklch(1 0 0);
+		--edge: oklch(0.9 0.008 250);
+		--text: oklch(0.22 0.02 260);
+		--muted: oklch(0.52 0.02 260);
+		--faint: oklch(0.68 0.015 260);
+
+		--regenerable: oklch(0.62 0.13 175);
+		--review: oklch(0.66 0.15 70);
+		--irreplaceable: oklch(0.55 0.05 85);
+		--unknown: oklch(0.85 0.01 260);
+
+		--ring: var(--regenerable);
+	}
+
+	:root.dark {
+		--ground: oklch(0.16 0.015 260);
+		--surface: oklch(0.21 0.018 260);
+		--edge: oklch(0.29 0.02 260);
+		--text: oklch(0.94 0.008 260);
+		--muted: oklch(0.68 0.02 260);
+		--faint: oklch(0.5 0.02 260);
+
+		--regenerable: oklch(0.83 0.14 175);
+		--review: oklch(0.82 0.14 75);
+		--irreplaceable: oklch(0.9 0.03 85);
+		--unknown: oklch(0.36 0.02 260);
+	}
+
+	html {
+		background: var(--ground);
+		color: var(--text);
+	}
+
+	body {
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
+	}
+
+	/* One visible focus treatment everywhere, including inside the SVG map. */
+	:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+		border-radius: 4px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			transition-duration: 0.01ms !important;
+		}
+	}
+}
+
+@utility sr-only-focusable {
+	position: absolute;
+	left: -9999px;
+	&:focus {
+		left: 0.75rem;
+		top: 0.75rem;
+		z-index: 50;
+	}
+}

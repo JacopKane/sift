@@ -31,6 +31,7 @@ class Index:
         min_bytes: int | None = None,
         max_bytes: int | None = None,
         name_contains: str | None = None,
+        path_contains: str | None = None,
         limit: int = 60,
     ) -> dict[str, object]:
         """Matching files, with protected ones counted rather than silently dropped.
@@ -48,6 +49,10 @@ class Index:
             and (min_bytes is None or node.size_bytes >= min_bytes)
             and (max_bytes is None or node.size_bytes <= max_bytes)
             and (name_contains is None or name_contains.lower() in node.name.lower())
+            # Searching by folder needs the whole path: "Documents" never appears in
+            # a filename, so without this the agent asks about a protected directory,
+            # matches nothing, and reports "there is no such folder" — which is false.
+            and (path_contains is None or path_contains.lower() in str(node.path).lower())
         ]
         allowed = [node for node in matched if not self.is_protected(node.path)]
         withheld = len(matched) - len(allowed)

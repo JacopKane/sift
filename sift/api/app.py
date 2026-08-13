@@ -14,6 +14,7 @@ from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -24,7 +25,13 @@ from sift.plan import build_plan
 from sift.scanner import boot_volume_exclusions
 from sift.survey import candidates_for_model, survey
 
-PAGE = Path(__file__).parent / "index.html"
+STATIC = Path(__file__).parent / "static"
+PAGE = STATIC / "index.html"
+"""The built SvelteKit app.
+
+Committed rather than built on demand, so `uv run uvicorn` works in a fresh clone
+with no npm step. Rebuild with `npm run build` in web/ after changing the
+frontend."""
 
 MAX_DEPTH = 4
 """How deep the chart is drawn. Past this, arcs are thinner than a pixel."""
@@ -49,6 +56,9 @@ def create_app(home: Path | None = None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
         return HTMLResponse(PAGE.read_text(encoding="utf-8"))
+
+    # Mounted last in create_app so the API routes above always win.
+    app.mount("/_app", StaticFiles(directory=STATIC / "_app"), name="assets")
 
     @app.get("/api/survey")
     async def survey_endpoint(root: str, judge: bool = False) -> EventSourceResponse:
@@ -126,12 +136,17 @@ def _stream(
                 "data": json.dumps({"count": len(candidates)}),
             }
             judgements = classify(candidates)
-            # Written back into the tree so the map is coloured by them too. Without
-            # this the chart only ever sees catalog verdicts, and a folder the
-            # catalog knows nothing about — a Downloads folder — draws entirely grey.
-            _apply(tree, judgements)
 
+    # Built before the verdicts are written back, and the order is load-bearing.
+    # _apply makes a model verdict indistinguishable from a catalog one, so a tree
+    # coloured first would have every judged item counted twice: once by
+    # _from_catalog walking settled nodes, once by _from_model.
     plan = build_plan(tree, judgements)
+
+    # Now colour the tree, so the map shows what the model decided. Without this
+    # a folder the catalog knows nothing about — a Downloads folder — draws
+    # entirely grey.
+    _apply(tree, judgements)
     yield {
         "event": "done",
         "data": json.dumps(

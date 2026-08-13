@@ -33,3 +33,7 @@ quarantine/
 # Editors
 .idea/
 *.swp
+
+# SvelteKit
+web/node_modules/
+web/.svelte-kit/
