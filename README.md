@@ -1,8 +1,8 @@
 # Sift
 
-**A disk analyzer that knows what's safe to delete.**
+**Disk cleanup that asks instead of guessing.**
 
-Every disk tool shows you where your space went. Sift tells you what to do about it.
+You tell it what you need. It works out what it can, asks about what it can't, and shows you the whole picture before anything moves.
 
 > **Status:** in development. The interface below is the v1 target — see [Roadmap](#roadmap).
 
@@ -15,84 +15,131 @@ You're out of space. Your disk visualizer draws a beautiful map:
 ```
 41.2 GB   ~/Library/Containers/com.docker.docker/.../Docker.raw
 12.4 GB   ~/Sites/client-app/node_modules
-12.1 GB   ~/Pictures/2019-portugal
+12.1 GB   ~/Archive/clients-2021
 ```
 
 Now what?
 
 - **It answers the wrong question.** You learn *where* your space went, never *which of these is safe to delete*.
-- **Size and disposability are unrelated.** The last two are the same size — one is `npm install` away from full restoration, the other is irreplaceable.
-- **So you google paths one at a time.** Forty minutes later you've reclaimed 3 GB and still don't know about that Docker file.
+- **Size and disposability are unrelated.** The last two are nearly the same size — one is `npm install` away from full restoration, the other might be the only copy.
+- **And the deciding fact isn't on the disk.** Whether `clients-2021` still matters was never written anywhere. No scanner recovers it, however thorough.
 
-**Sift sorts your disk by what you can get back.**
+That last point is the whole design. **The missing information is in your head, so the tool has to ask.**
 
 ---
 
-## What a size-based tool structurally can't do
+## How it works
 
-- **Know what something is.** It sees bytes and a path string, so it can't tell a rebuildable cache from the only copy of a client project. That judgement is semantic — which is the reason there's a model in here at all.
-- **Show patterns instead of paths.** Your 47 `node_modules` folders total 31 GB, but a tree view scatters them into 47 slivers you'll never connect. Sift shows one line.
-- **Take a goal.** There's no way to say *"free 80 GB, but I'm mid-sprint on the Rust project."* Sift starts there and works backwards.
+1. **You say what you want.** *"Free 80 GB, but I'm mid-sprint on the Rust project."*
+2. **It surveys while you type.** The walk takes seconds, so by the time you've finished the sentence it already knows your disk.
+3. **It resolves what it can.** Known caches and build artifacts are settled instantly, with no model involved.
+4. **It asks about what it can't.** Only where it's genuinely uncertain and the stakes are real — never about things a filename already answers.
+5. **You review the map.** Everything it proposes, coloured by what you can get back, visible at once.
+6. **You approve.** Items move to quarantine. `sift undo` puts them back.
 
 ---
 
 ## Design decisions
 
+**The conversation is the product — and every question has to be earned.**
+An agent that asks what it could have worked out is ceremony, and worse than silence. Questions are gated on three conditions at once: genuinely uncertain, large enough to matter, and not obviously regenerable. A 200 MB mystery folder gets marked amber; a 40 GB one gets asked about.
+
+**The map is the final review, not the exploration surface.**
+Other tools open with the chart and leave you to interpret it. Sift earns the chart: by the time you see it, every arc has a verdict and a reason. It's the last look before you commit, not a puzzle to solve.
+
 **Regenerability is the unit, not size.**
-Every proposal carries what you actually need in order to decide:
+Every proposal carries what you need in order to decide:
 
 ```
-47 node_modules directories      31.2 GB  🟢   npm install         ~4 min
-Xcode DerivedData                18.7 GB  🟢   rebuilds on open    ~90 sec
-~/Archive/clients-2021            8.1 GB  🔴   cannot be restored
+47 node_modules directories      31.2 GB  🟢 ↺  npm install         ~4 min
+Xcode DerivedData                18.7 GB  🟢 ↺  rebuilds on open    ~90 sec
+~/Archive/clients-2021            8.1 GB  🔴 ✕  cannot be restored
 ```
 
-Red items are never proposed for deletion — they're shown so you can see Sift understood your disk too.
+Verdict is never carried by colour alone — each level has its own glyph, so the distinction survives colour blindness and greyscale.
 
-**The visualization *is* the AI output.**
-The sunburst is coloured by verdict instead of by position, so one glance tells you which fraction of your disk is disposable. It isn't decoration sitting beside the intelligence; it's the intelligence, rendered.
+**It reasons from metadata, never from your files.**
+Extensions, locations, sibling markers, access times, naming patterns. A `Cargo.toml` beside `target/` settles it; 95% `.o` files settles it; two years untouched is a real signal. **No file contents are ever read or sent anywhere** — when metadata runs out, it asks you rather than opening the file.
+
+**Nothing is ever deleted.**
+Reclaiming *moves* paths into quarantine alongside a manifest of where each came from. There is no code path in this repo that deletes a file. Emptying quarantine is a separate act you perform.
+
+**Permission failures are a designed state.**
+Default scan roots need no macOS permission at all, so Sift is useful seconds after launch. Blocked folders appear as cards with a grant button, never as stack traces. Full Disk Access is an upgrade, not a prerequisite.
+
+---
+
+## The review screen
 
 ```
-     🟢 regenerable   🟡 worth a look   🔴 irreplaceable
+     🟢 ↺ regenerable    🟡 ? worth a look    🔴 ✕ irreplaceable
 
   ┌────────────────────────────┬─────────────────────────┐
-  │         ╭───────╮          │  ⌕ free 80 GB, but I'm  │
-  │      ╭──┤ 🟢🟢🟡├──╮       │    mid-sprint on the    │
-  │      │  ╰───────╯  │       │    Rust project         │
-  │      │   🔴   🟢   │       │  ┌───────────────────┐  │
-  │      ╰─────────────╯       │  │ ◉ 47 node_modules │  │
-  │                            │  │   31.2 GB      🟢 │  │
-  │   ‹ Home / Library         │  │   ↩ npm i   ~4min │  │
-  │                            │  │   [ Reclaim ]     │  │
+  │         ╭───────╮          │  Plan · 84.3 GB         │
+  │      ╭──┤ 🟢🟢🟡├──╮       │  ┌───────────────────┐  │
+  │      │  ╰───────╯  │       │  │ ◉ 47 node_modules │  │
+  │      │   🔴   🟢   │       │  │   31.2 GB    🟢 ↺ │  │
+  │      ╰─────────────╯       │  │   ↩ npm i   ~4min │  │
+  │                            │  └───────────────────┘  │
+  │   ‹ Home / Library         │  ┌───────────────────┐  │
+  │     tab to walk arcs       │  │ ○ DerivedData     │  │
   ├────────────────────────────┴─────────────────────────┤
-  │  reclaimable 84.3 GB  ·  scanned 412 GB              │
+  │  reclaimable 84.3 GB · scanned 412 GB · 3 skipped 🔒 │
   └──────────────────────────────────────────────────────┘
 ```
 
-**Results stream in.**
-Arcs grow as the scanner walks and plan items appear as they're classified. A scan is slow enough that a spinner would be a lie about what's happening.
-
-**Approve before act — and nothing is ever deleted.**
-Sift proposes, you approve item by item. Reclaiming *moves* paths into quarantine with a manifest, and `sift undo` puts them back. No code path in this repo deletes a file.
-
-**Permission failures are a designed state.**
-Default scan roots need no macOS permission at all, so Sift is useful seconds after launch. Blocked folders show up as cards with a grant button, never as stack traces. Full Disk Access is an upgrade, not a prerequisite.
+The chart is not the only way to read this. Every arc is reachable by keyboard, and the same data is available as a plain table for screen readers — the visualization is an enhancement, never the sole channel.
 
 ---
 
 ## Where the AI is — and where it deliberately isn't
 
-Most of Sift is not AI, on purpose. A model in the wrong layer is slower, costlier, and less accurate than the boring alternative.
+Each level only ever sees what the level above couldn't resolve.
 
-| Layer | How | Why |
+| Level | What | Cost |
 |---|---|---|
-| Walk the tree, sizes, timestamps | `os.scandir` | A model is strictly worse at traversal and arithmetic |
-| ~40 known paths — caches, build artifacts, Docker, Trash | Static `catalog.yaml` | Deterministic, instant, free, and covers most reclaimable bytes |
-| **Classify what the catalog can't name** | **One batched LLM call** | Genuinely semantic: build artifact, cache, or the only copy of something? |
-| **Parse goal and constraints** | **LLM** | *"nothing related to the Rust project"* has no regex |
-| Aggregate, order, total | Plain Python | Arithmetic |
+| Walk the tree, sizes, timestamps | `os.scandir` | free |
+| **Catalog** — ~40 known paths: caches, build artifacts, Docker, Trash | static `catalog.yaml` | free, instant |
+| **Classify** — unresolved directories, from metadata alone | one batched call | small |
+| **Ask** — genuine uncertainty, high stakes only | a few turns | rare by design |
+| Aggregate, order, total | plain Python | free |
 
-The model never sees your file tree — just a few dozen unnamed directories described by their signals. One call, a few kilobytes, no file contents.
+Two optimizations do most of the work: **directories are classified, not files** — you ask about the ~50 that didn't resolve, not the 47,000 beneath them — and the catalog settles the majority of reclaimable bytes before a model is ever invoked.
+
+---
+
+## Architecture
+
+```
+   you ──▶ chat
+            │
+            ▼
+     ┌──────────────┐
+     │    survey    │   walk + catalog — starts while you type
+     └──────┬───────┘
+            ▼
+     ┌──────────────┐
+     │   classify   │   metadata only, one batched call
+     └──────┬───────┘
+            ▼
+       ⏸  ask you      only when uncertain and it matters
+            │
+            ▼
+     ┌──────────────┐
+     │     plan     │   aggregate by rule, order by risk
+     └──────┬───────┘
+            ▼
+       ⏸  review      the map, coloured, whole plan at once
+            │
+            ▼
+     ┌──────────────┐
+     │  quarantine  │   move + manifest + undo
+     └──────────────┘
+```
+
+- Two pauses, both genuine: one for questions, one for approval. State survives both.
+- `scanner/` is a pure library with no web or AI imports, so it stays portable to a CLI or native shell.
+- The model provider is set by environment variable — Gemini, Claude, or GPT, same graph.
 
 ---
 
@@ -100,75 +147,35 @@ The model never sees your file tree — just a few dozen unnamed directories des
 
 **In**
 
-- Filesystem scan, streamed to the UI as it walks
+- Filesystem survey, reported as it walks
 - Static catalog of known paths and verdicts
-- LLM classification of unknown directories, batched into one call
-- Goal and constraint parsing
-- Verdict-coloured sunburst
-- Plan aggregated by pattern rather than path
+- Metadata classification of unresolved directories, batched into one call
+- Conversational clarification when — and only when — uncertainty is real
+- Free-form prompts against the survey (*"get rid of the large videos"*)
+- Review map, verdict-coloured, keyboard navigable, with a table equivalent
 - Per-item approval, reclaim to quarantine, `undo`
-- Two entry points: local scan, and drag-a-folder in the browser
+- Two entry points: local survey, and drag-a-folder in the browser
 
 **Out, and why**
 
 | Deferred | Reasoning |
 |---|---|
+| Reading file contents | Asking you is cheaper, faster, and keeps the privacy promise absolute |
 | Content-hash duplicate detection | Real work, and an orthogonal thesis — regenerability first |
 | Background / scheduled scans | Turns a tool you open into a daemon you maintain |
 | Windows and Linux | The catalog is the moat and it's platform-specific |
 | Multi-volume, network drives | Long tail of edge cases, small share of the problem |
-| Cloud storage | Different permissions, different failures, different product |
 | Native app shell | Correct eventually — but it's packaging, not product |
 | Accounts, sync, teams | A local disk tool needs no server-side identity |
 
-v1 does one thing completely — tell you what's safe to delete and let you act on it — rather than six things partially.
-
----
-
-## Architecture
-
-```
-                        ┌──────────────────────────────┐
-  local scan  ─────────▶│  scanner/   os.scandir       │
-  (real paths)          │            reports as it goes│
-                        └──────────────┬───────────────┘
-                                       │  ScanNode
-  dragged folder ──────────────────────┤
-  (names + sizes only)                 ▼
-                        ┌──────────────────────────────┐
-                        │  catalog/   catalog.yaml     │  most resolved, 0 cost
-                        └──────────────┬───────────────┘
-                                       │  unknowns only
-                                       ▼
-                        ┌──────────────────────────────┐
-                        │  classify/  one batched call │
-                        └──────────────┬───────────────┘
-                                       │  Verdict
-                                       ▼
-                        ┌──────────────────────────────┐
-                        │  plan/      aggregate, order │
-                        └──────────────┬───────────────┘
-                                       │  SSE
-                                       ▼
-                        ┌──────────────────────────────┐
-                        │  web/       sunburst + plan  │
-                        └──────────────┬───────────────┘
-                                       │  approve
-                                       ▼
-                        ┌──────────────────────────────┐
-                        │  quarantine/ move + manifest │
-                        └──────────────────────────────┘
-```
-
-- Both entry points converge on the same classification pipeline.
-- `scanner/` is a pure library with no web or AI imports, so it stays portable to a CLI or native shell.
+v1 does one thing completely — understand what your files mean to *you*, and act on it — rather than six things partially.
 
 ---
 
 ## Running it
 
 **Analyze a folder — nothing to install.**
-Open the hosted build and drag a directory onto the page. The browser walks the tree locally and sends only a manifest of names and sizes; no file contents leave your machine.
+Open the hosted build and drag a directory onto the page. The browser walks the tree locally and sends only a manifest of names and sizes.
 
 **Analyze your whole machine.**
 
@@ -176,7 +183,14 @@ Open the hosted build and drag a directory onto the page. The browser walks the 
 uvx --from git+https://github.com/<user>/sift sift
 ```
 
-One command starts the server, opens your browser, and begins scanning the safe roots immediately — no config, no empty state.
+One command starts the server, opens your browser, and begins surveying immediately.
+
+**Choosing a model.** Set two environment variables; nothing else changes.
+
+```bash
+SIFT_PROVIDER=google_genai   # or anthropic, openai
+SIFT_MODEL=gemini-2.0-flash
+```
 
 ---
 
@@ -194,15 +208,15 @@ pytest -m "not slow"   # fast suite, matches the pre-commit hook
 
 - Every commit runs formatting, linting, type checks, and the fast suite.
 - Every push runs the full suite including filesystem scenarios and end-to-end tests.
-- No test makes a network call — the model layer has a deterministic fake and recorded fixtures.
+- No test makes a network call — the model layer has a deterministic fake.
 
 ---
 
 ## Roadmap
 
 - **Native shell.** A Tauri wrapper gets real drag-and-drop with absolute paths, an app icon, and small signed binaries.
-- **Learned catalog.** Your corrections — *"this is safe"*, *"never touch this"* — feed back in, so it improves with use.
-- **Duplicate and version detection** by content hash, as a second lens on the same scan.
+- **Learned catalog.** Your answers — *"this is safe"*, *"never touch this"* — feed back in, so it asks you the same question only once.
+- **Duplicate and version detection** by content hash, as a second lens on the same survey.
 - **Linux and Windows catalogs.**
 
 ---
