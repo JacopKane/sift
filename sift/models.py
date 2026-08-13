@@ -75,3 +75,15 @@ class Candidate(BaseModel):
     needs no further explanation."""
 
     largest_files: list[FileSummary] = Field(default_factory=list)
+
+
+class Classification(BaseModel):
+    """What a model concluded about one candidate."""
+
+    path: Path
+    verdict: Verdict
+    reason: str
+
+    restore: str
+    """Never optional. A verdict without a way back is exactly the information the
+    user needed, so "cannot be restored" has to be said rather than left blank."""
