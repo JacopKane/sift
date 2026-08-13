@@ -4,7 +4,8 @@
 
 You tell it what you need. It works out what it can, asks about what it can't, and shows you the whole picture before anything moves.
 
-> **Status:** in development. The interface below is the v1 target — see [Roadmap](#roadmap).
+> **Status:** in development. What runs today is listed under [Where it stands](#where-it-stands);
+> everything else on this page is the v1 target, not a description of the build.
 
 ---
 
@@ -59,7 +60,9 @@ Xcode DerivedData                18.7 GB  🟢 ↺  rebuilds on open    ~90 sec
 Verdict is never carried by colour alone — each level has its own glyph, so the distinction survives colour blindness and greyscale.
 
 **It reasons from metadata, never from your files.**
-Extensions, locations, sibling markers, access times, naming patterns. A `Cargo.toml` beside `target/` settles it; 95% `.o` files settles it; two years untouched is a real signal. **No file contents are ever read or sent anywhere** — when metadata runs out, it asks you rather than opening the file.
+Extensions, locations, sibling markers, naming patterns. A `Cargo.toml` beside `target/` settles it; 95% `.o` files settles it. **No file contents are ever read or sent anywhere** — when metadata runs out, it asks you rather than opening the file.
+
+Being precise, because the distinction matters: **file and folder names do go to the model**, along with sizes and extensions. That is what it reasons from. Contents never leave your machine.
 
 **Nothing is ever deleted.**
 Reclaiming *moves* paths into quarantine alongside a manifest of where each came from. There is no code path in this repo that deletes a file. Emptying quarantine is a separate act you perform.
@@ -174,16 +177,18 @@ v1 does one thing completely — understand what your files mean to *you*, and a
 
 ## Running it
 
-**Analyze a folder — nothing to install.**
+**Analyze a folder — nothing to install.** *(planned, not built)*
 Open the hosted build and drag a directory onto the page. The browser walks the tree locally and sends only a manifest of names and sizes.
 
 **Analyze your whole machine.**
 
 ```bash
-uvx --from git+https://github.com/<user>/sift sift
+uv sync
+cp .env.example .env        # add a key for whichever provider you pick
+uv run uvicorn "sift.api:create_app" --factory --port 8765
 ```
 
-One command starts the server, opens your browser, and begins surveying immediately.
+Then open `http://127.0.0.1:8765`. A single packaged command is on the roadmap; this is what runs today.
 
 **Choosing a model.** Set two environment variables; nothing else changes.
 
@@ -212,6 +217,30 @@ pytest -m "not slow"   # fast suite, matches the pre-commit hook
 - Model assertions are about properties, never exact strings, because real responses vary.
 
 ---
+
+## Where it stands
+
+**Working, end to end, against real disks — nothing mocked at any layer.**
+
+- **Survey** — walks a folder or a whole boot volume, streaming each directory as it is counted. Symlinks skipped, unreadable directories kept in the tree with a flag, apparent and on-disk sizes tracked separately. A directory the catalog can already name is counted but not explored.
+- **Catalog** — ~20 rules over known paths, matched by glob with sibling markers. Settles the common cases for nothing, and protects `~/Documents`, `~/Desktop`, `~/Pictures` and `~/.ssh` by rule.
+- **Classify** — one batched call judges whatever the catalog could not name, from metadata alone.
+- **Ask** — free-form requests answered by an agent with query tools over the survey. *"Delete the app installers I already installed"* returns the two `.dmg` files and nothing else.
+- **Plan** — grouped by rule, largest first, with what is safe separated from what needs a decision.
+- **Map and page** — verdict-coloured sunburst served over SSE by FastAPI.
+
+**Not built yet.**
+
+- **Reclaiming.** The plan is read-only. Quarantine, the manifest, and `undo` do not exist — nothing can be moved or deleted, by design and by omission both.
+- **The conversation.** Free-form asking works, but the graph does not yet pause to ask *you* a question when it is uncertain. Both interrupts are designed, neither is wired.
+- **Drag-a-folder in the browser.** Local surveys only so far.
+- **The `uvx` one-liner.** Run it with `uvx uvicorn "sift.api:create_app" --factory` for now.
+
+**Known limits.**
+
+- **Speed.** A 1.5M-file projects folder takes ~95s. Pruning already recognised directories cut objects eightfold, but the remaining cost is `stat` syscalls — threading is the fix, and it is not done.
+- **Frontend.** One hand-written HTML file. Not yet responsive, and keyboard reachability is partial.
+- **Requests.** One agent question spends three to six model calls. On a free Gemini key, set `SIFT_REQUESTS_PER_MINUTE=12`.
 
 ## Roadmap
 
