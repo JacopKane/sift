@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler
 from pytest_bdd import given, parsers, then, when
 
-from sift.models import ScanNode
-from sift.survey import survey
+from sift.classify import classify
+from sift.config import settings
+from sift.models import Classification, ScanNode
+from sift.survey import candidates_for_model, survey
 from tests import machine as machine_module
 from tests.machine import Machine
 
@@ -64,6 +68,33 @@ def survey_the_machine(machine: Machine) -> list[ScanNode]:
     # The catalog is anchored at the machine root, so its ~/... rules resolve
     # against the fixture rather than against the real home directory.
     return list(survey(machine.root, home=machine.root))
+
+
+class CallCounter(BaseCallbackHandler):
+    """Counts real model invocations. Observation, not substitution."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def on_chat_model_start(self, *args: Any, **kwargs: Any) -> None:
+        self.calls += 1
+
+    def on_llm_start(self, *args: Any, **kwargs: Any) -> None:
+        self.calls += 1
+
+
+@pytest.fixture
+def counter() -> CallCounter:
+    return CallCounter()
+
+
+@when("I ask the model about the candidates", target_fixture="classified")
+def ask_the_model(reports: list[ScanNode], counter: CallCounter) -> list[Classification]:
+    if not settings().api_key:
+        pytest.skip(f"no API key configured for provider {settings().provider}")
+    candidates = candidates_for_model(tree_of(reports))
+    assert candidates, "the fixture should leave something for the model to judge"
+    return classify(candidates, config={"callbacks": [counter]})
 
 
 @then("the survey total matches every file that was written")

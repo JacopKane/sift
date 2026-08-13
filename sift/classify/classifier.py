@@ -78,6 +78,11 @@ def classify(
         ),
     )
 
+    # Sizes and labels come back from the candidate, never from the tree. A
+    # remainder candidate is smaller than the directory it names, and looking it up
+    # again would silently re-count the files broken out of it.
+    offered = {str(candidate.path): candidate for candidate in candidates}
+
     # Deliberately not filtered against the offered set: if the model answers about
     # something nobody asked, that is a fact worth failing a test over rather than
     # quietly discarding.
@@ -87,9 +92,17 @@ def classify(
             verdict=judgement.verdict,
             reason=judgement.reason,
             restore=judgement.restore,
+            label=_of(offered, judgement.path, "label", Path(judgement.path).name),
+            size_bytes=_of(offered, judgement.path, "size_bytes", 0),
+            excluding=_of(offered, judgement.path, "excluding", []),
         )
         for judgement in reply.judgements
     ]
+
+
+def _of(offered: dict[str, Candidate], path: str, field: str, fallback: Any) -> Any:
+    candidate = offered.get(path)
+    return getattr(candidate, field) if candidate else fallback
 
 
 def _chat_model() -> BaseChatModel:

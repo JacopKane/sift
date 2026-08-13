@@ -6,47 +6,14 @@ because real responses vary between runs.
 
 from __future__ import annotations
 
-from typing import Any
+from pytest_bdd import parsers, scenarios, then
 
-import pytest
-from langchain_core.callbacks import BaseCallbackHandler
-from pytest_bdd import parsers, scenarios, then, when
-
-from sift.classify import classify
-from sift.config import settings
 from sift.models import Classification, ScanNode, Verdict
 from sift.survey import candidates_for_model
 from tests.machine import Machine
-from tests.steps.conftest import tree_of
+from tests.steps.conftest import CallCounter, tree_of
 
 scenarios("classify.feature")
-
-
-class CallCounter(BaseCallbackHandler):
-    """Counts real model invocations. Observation, not substitution."""
-
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def on_chat_model_start(self, *args: Any, **kwargs: Any) -> None:
-        self.calls += 1
-
-    def on_llm_start(self, *args: Any, **kwargs: Any) -> None:
-        self.calls += 1
-
-
-@pytest.fixture
-def counter() -> CallCounter:
-    return CallCounter()
-
-
-@when("I ask the model about the candidates", target_fixture="classified")
-def ask_the_model(reports: list[ScanNode], counter: CallCounter) -> list[Classification]:
-    if not settings().api_key:
-        pytest.skip(f"no API key configured for provider {settings().provider}")
-    candidates = candidates_for_model(tree_of(reports))
-    assert candidates, "the fixture should leave something for the model to judge"
-    return classify(candidates, config={"callbacks": [counter]})
 
 
 def _for(classified: list[Classification], machine: Machine, relpath: str) -> Classification:

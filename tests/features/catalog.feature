@@ -52,10 +52,10 @@ Feature: Recognising what a directory is
 
   Scenario: The model is asked about opaque directories, not about every directory
     When I survey the machine
-    Then "Downloads" is a candidate
-    And "Archive" is a candidate
+    Then "Archive" is a candidate
+    And "Sites/client-app/src" is a candidate
     And candidates are offered largest first
-    And no candidate is inside another candidate
+    And no candidate counts bytes another candidate already counted
     And the model is asked about fewer than 10 directories
 
   Scenario: A directory holding recognised things is descended into, not asked about
@@ -70,7 +70,15 @@ Feature: Recognising what a directory is
     When I survey the machine
     Then "Sites/another/target" is not recognised
 
-  Scenario: A candidate carries enough context for the model to reason about it
+  Scenario: A file big enough to decide on its own is judged on its own
     When I survey the machine
-    Then the candidate "Downloads" reports its largest files
+    Then "Downloads/screen-recording-2024-11-14.mp4" is a candidate
+    And "Downloads/dataset-export.zip" is a candidate
+    And "Downloads/invoice-2024-01.pdf" is not a candidate
+
+  Scenario: What is left of a directory is still offered, without the files taken out of it
+    When I survey the machine
+    Then "Downloads" is a candidate
+    And the candidate "Downloads" leaves out "screen-recording-2024-11-14.mp4"
+    And the candidate "Downloads" reports its largest files
     And the candidate "Downloads" reports which extensions fill it

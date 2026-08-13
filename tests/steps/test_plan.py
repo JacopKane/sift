@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from sift.models import Plan, ScanNode, Verdict
+from sift.models import Classification, Plan, ScanNode, Verdict
 from sift.plan import build_plan
 from tests.machine import KB, Machine
 from tests.steps.conftest import tree_of
@@ -27,6 +27,35 @@ def a_second_project(machine: Machine, relpath: str) -> None:
 @when("I build a plan", target_fixture="plan")
 def i_build_a_plan(reports: list[ScanNode]) -> Plan:
     return build_plan(tree_of(reports))
+
+
+@when("I build a plan from what the model said", target_fixture="plan")
+def i_build_a_plan_from_judgements(
+    reports: list[ScanNode], classified: list[Classification]
+) -> Plan:
+    return build_plan(tree_of(reports), classified)
+
+
+@then("the plan accounts for no more than was surveyed")
+def accounts_for_no_more_than_surveyed(plan: Plan) -> None:
+    claimed = sum(item.size_bytes for item in [*plan.proposals, *plan.protected])
+    assert claimed <= plan.surveyed_bytes, (
+        f"the plan claims {claimed} bytes of a {plan.surveyed_bytes} byte survey, "
+        "so something is counted twice"
+    )
+
+
+@then("nothing proposed contains something kept back")
+def nothing_proposed_contains_protected(plan: Plan) -> None:
+    protected = {path for item in plan.protected for path in item.paths}
+    for item in plan.proposals:
+        for path in item.paths:
+            swept_up = {
+                kept for kept in protected if path in kept.parents and kept not in item.excluding
+            }
+            assert (
+                not swept_up
+            ), f"reclaiming {path} would delete {swept_up}, which the plan says cannot be replaced"
 
 
 @then(parsers.parse('the plan has one proposal for "{label}"'))

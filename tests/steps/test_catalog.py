@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from pytest_bdd import given, parsers, scenarios, then
 
 from sift.models import Candidate, ScanNode, Verdict
@@ -124,12 +122,24 @@ def candidates_largest_first(reports: list[ScanNode]) -> None:
     assert sizes == sorted(sizes, reverse=True)
 
 
-@then("no candidate is inside another candidate")
-def no_nested_candidates(reports: list[ScanNode]) -> None:
-    paths: set[Path] = {c.path for c in _candidates(reports)}
-    for candidate in _candidates(reports):
-        overlap = paths & set(candidate.path.parents)
-        assert not overlap, f"{candidate.path} nests inside {overlap}"
+@then("no candidate counts bytes another candidate already counted")
+def candidates_are_disjoint(reports: list[ScanNode]) -> None:
+    # A big file and the directory it sits in can both be candidates — that is the
+    # point — but between them they must add up to no more than what is there.
+    candidates = _candidates(reports)
+    assert sum(c.size_bytes for c in candidates) <= tree_of(reports).size_bytes
+
+
+@then(parsers.parse('the candidate "{relpath}" leaves out "{name}"'))
+def candidate_leaves_out(
+    reports: list[ScanNode], machine: Machine, relpath: str, name: str
+) -> None:
+    candidate = _candidate(reports, machine, relpath)
+    assert name not in {file.name for file in candidate.largest_files}
+    broken_out = _node(reports, machine, f"{relpath}/{name}")
+    assert (
+        candidate.size_bytes < broken_out.size_bytes
+    ), "the remainder should be what is left after the big file, not the whole directory"
 
 
 @then(parsers.parse("the model is asked about fewer than {limit:d} directories"))
@@ -150,5 +160,5 @@ def candidate_reports_largest_files(
 @then(parsers.parse('the candidate "{relpath}" reports which extensions fill it'))
 def candidate_reports_extensions(reports: list[ScanNode], machine: Machine, relpath: str) -> None:
     candidate = _candidate(reports, machine, relpath)
-    assert ".mp4" in candidate.extensions
+    assert ".dmg" in candidate.extensions
     assert ".pdf" in candidate.extensions

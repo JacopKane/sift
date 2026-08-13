@@ -69,14 +69,16 @@ def _from_catalog(tree: ScanNode) -> Iterator[PlanItem]:
 
 def _from_model(tree: ScanNode, classifications: Sequence[Classification]) -> Iterator[PlanItem]:
     for classification in classifications:
-        node = _node_at(tree, classification.path)
-        if node is None:
+        if _node_at(tree, classification.path) is None:
             continue  # the model answered about something that isn't on this disk
         yield PlanItem(
-            label=classification.path.name,
+            label=classification.label or classification.path.name,
             verdict=classification.verdict,
-            size_bytes=node.size_bytes,
+            # The candidate's size, not the node's: a remainder covers less than the
+            # directory it is named after.
+            size_bytes=classification.size_bytes,
             paths=[classification.path],
+            excluding=classification.excluding,
             restore=classification.restore,
             reason=classification.reason,
         )

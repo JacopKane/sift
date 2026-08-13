@@ -40,6 +40,14 @@ Feature: Turning verdicts into something you can act on
     And neither total counts anything protected
     And the reclaimable total is less than everything surveyed
 
+  @slow
+  Scenario: The plan never accounts for more bytes than the disk holds
+    When I survey the machine
+    And I ask the model about the candidates
+    And I build a plan from what the model said
+    Then the plan accounts for no more than was surveyed
+    And nothing proposed contains something kept back
+
   Scenario: A directory inside something already proposed is not proposed twice
     When I survey the machine
     And I build a plan

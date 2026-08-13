@@ -72,8 +72,15 @@ class Candidate(BaseModel):
 
     path: Path
     name: str
+    label: str
     size_bytes: int
     file_count: int
+
+    excluding: list[Path] = Field(default_factory=list)
+    """Files inside this directory that are being judged separately, because they
+    are large enough to decide on their own. Their bytes are not in
+    ``size_bytes``, and reclaiming this candidate must leave them alone."""
+
     extensions: dict[str, int] = Field(default_factory=dict)
     """Extension to total bytes, largest first. A directory that is 95% .o files
     needs no further explanation."""
@@ -87,6 +94,13 @@ class Classification(BaseModel):
     path: Path
     verdict: Verdict
     reason: str
+
+    label: str = ""
+    size_bytes: int = 0
+    excluding: list[Path] = Field(default_factory=list)
+    """Carried over from the candidate rather than re-read from the tree. A
+    remainder candidate is smaller than the directory it names, and looking the
+    size up again would silently count the broken-out files twice."""
 
     restore: str
     """Never optional. A verdict without a way back is exactly the information the
@@ -104,6 +118,10 @@ class PlanItem(BaseModel):
     restore_time: str | None = None
     rule_id: str | None = None
     reason: str | None = None
+
+    excluding: list[Path] = Field(default_factory=list)
+    """Paths inside this item that it does not cover, because they are their own
+    decision. Reclaiming this item must leave them where they are."""
     """Why, when a model decided it. Catalog rules carry their reason in the label."""
 
 
