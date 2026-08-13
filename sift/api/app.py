@@ -126,6 +126,10 @@ def _stream(
                 "data": json.dumps({"count": len(candidates)}),
             }
             judgements = classify(candidates)
+            # Written back into the tree so the map is coloured by them too. Without
+            # this the chart only ever sees catalog verdicts, and a folder the
+            # catalog knows nothing about — a Downloads folder — draws entirely grey.
+            _apply(tree, judgements)
 
     plan = build_plan(tree, judgements)
     yield {
@@ -134,6 +138,19 @@ def _stream(
             {"plan": plan.model_dump(mode="json"), "chart": _chart(tree, tree.size_bytes)}
         ),
     }
+
+
+def _apply(tree: ScanNode, judgements: list[Classification]) -> None:
+    by_path = {judgement.path: judgement for judgement in judgements}
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        judgement = by_path.get(node.path)
+        if judgement is not None and node.verdict is None:
+            node.verdict = judgement.verdict
+            node.label = judgement.label or node.name
+            node.restore = judgement.restore
+        stack.extend(node.children)
 
 
 def _report(node: ScanNode) -> dict[str, Any]:

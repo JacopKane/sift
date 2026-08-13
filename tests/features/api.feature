@@ -37,6 +37,12 @@ Feature: Serving a survey to a browser
     When the browser surveys the machine
     Then directories are reported before the plan
 
+  @slow
+  Scenario: The map is coloured by what the model decided, not only by what the catalog knew
+    When the browser surveys the machine and asks the model
+    Then the map shows a verdict for "Downloads"
+    And the map is not a single colour
+
   Scenario: The app serves a page
     When the browser opens the app
     Then it receives an HTML page

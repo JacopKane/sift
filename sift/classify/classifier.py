@@ -8,12 +8,14 @@ what fills it.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
@@ -105,12 +107,24 @@ def _of(offered: dict[str, Candidate], path: str, field: str, fallback: Any) -> 
     return getattr(candidate, field) if candidate else fallback
 
 
+@lru_cache(maxsize=1)
+def _limiter() -> InMemoryRateLimiter:
+    """One bucket for the whole process, shared by every call.
+
+    Retrying alone does not help: the retries spend the same minute's budget as
+    the requests that exhausted it. Pacing is what actually prevents the failure.
+    """
+    per_minute = settings().sift_requests_per_minute
+    return InMemoryRateLimiter(
+        requests_per_second=per_minute / 60,
+        check_every_n_seconds=0.25,
+        max_bucket_size=max(1, per_minute // 4),
+    )
+
+
 def chat_model() -> BaseChatModel:
     conf = settings()
-    # The agent loop spends three to six requests answering one question, and the
-    # Gemini free tier allows fifteen a minute. Backing off is the difference
-    # between a pause and a failure.
-    kwargs: dict[str, Any] = {"max_retries": 6}
+    kwargs: dict[str, Any] = {"max_retries": 6, "rate_limiter": _limiter()}
 
     # Passed explicitly rather than exported to os.environ: the key comes from .env
     # via Settings, and a library reading it back out of the process environment

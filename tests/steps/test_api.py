@@ -42,6 +42,43 @@ def browser_surveys(machine: Machine) -> list[dict[str, Any]]:
     return _events(response.text)
 
 
+@when("the browser surveys the machine and asks the model", target_fixture="events")
+def browser_surveys_and_judges(machine: Machine) -> list[dict[str, Any]]:
+    client = TestClient(create_app(home=machine.root))
+    response = client.get("/api/survey", params={"root": str(machine.root), "judge": True})
+    assert response.status_code == 200
+    return _events(response.text)
+
+
+def _chart_nodes(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    done = next(e["data"] for e in events if e["event"] == "done")
+    found: list[dict[str, Any]] = []
+    stack = [done["chart"]]
+    while stack:
+        node = stack.pop()
+        found.append(node)
+        stack.extend(node["children"])
+    return found
+
+
+@then(parsers.parse('the map shows a verdict for "{relpath}"'))
+def map_shows_verdict(events: list[dict[str, Any]], machine: Machine, relpath: str) -> None:
+    wanted = str(machine.path(relpath))
+    node = next((n for n in _chart_nodes(events) if n["path"] == wanted), None)
+    assert node is not None, f"{relpath} is not on the map"
+    assert (
+        node["verdict"] is not None
+    ), f"{relpath} was judged but the map shows it as unknown, so it draws in grey"
+
+
+@then("the map is not a single colour")
+def map_is_not_one_colour(events: list[dict[str, Any]]) -> None:
+    verdicts = {node["verdict"] for node in _chart_nodes(events)}
+    assert (
+        len(verdicts - {None}) > 1
+    ), f"the whole map draws in one colour; verdicts present: {verdicts}"
+
+
 @when("the browser opens the app", target_fixture="page")
 def browser_opens_app(machine: Machine) -> str:
     client = TestClient(create_app(home=machine.root))

@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     sift_provider: str = "google_genai"
     sift_model: str = "gemini-3.1-flash-lite"
 
+    sift_requests_per_minute: int = 300
+    """A backstop against a runaway agent loop, not a throttle.
+
+    Measured on the paid tier: 40 requests in 4.0s, none refused. The free tier
+    allows fifteen a minute, and one agent question spends three to six — so on a
+    free key this needs dropping to about 12, or a second question in quick
+    succession fails outright."""
+
     google_api_key: str | None = None
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
