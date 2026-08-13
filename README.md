@@ -207,8 +207,9 @@ pytest -m "not slow"   # fast suite, matches the pre-commit hook
 ```
 
 - Every commit runs formatting, linting, type checks, and the fast suite.
-- Every push runs the full suite including filesystem scenarios and end-to-end tests.
-- No test makes a network call — the model layer has a deterministic fake.
+- Every push runs the full suite, which calls the real model — nothing is mocked, so a passing
+  suite means the thing actually works.
+- Model assertions are about properties, never exact strings, because real responses vary.
 
 ---
 

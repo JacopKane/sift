@@ -13,10 +13,16 @@ the test.
 in the user's language, not the code's. Step definitions bind them to the system.
 
 **Fat integration tests, not unit tests.** Every test exercises real code paths end to end —
-real filesystem, real graph, real API, real HTTP — against a fixture that resembles a real
-machine. Fakes exist at exactly **one** boundary: the network. Never mock the filesystem,
-never stub a layer of our own code, never assert on a constant. Prefer one scenario that
-proves something true about the whole system over five that each poke at a part of it.
+real filesystem, real graph, real HTTP, real model — against a fixture that resembles a real
+machine. **Nothing is mocked, including the model.** Never mock the filesystem, never stub a
+layer of our own code, never assert on a constant. A fake only ever proves the fake works.
+Prefer one scenario that proves something true about the whole system over five that each
+poke at a part of it.
+
+**Real model calls are nondeterministic, so assert on properties, not strings.** `node_modules
+is never irreplaceable` is a real assertion; `restore == "npm install"` is a flake waiting to
+happen. Anything that hits the network is marked `slow`, so it runs on push rather than on
+every commit — the model is real either way, only the cadence differs.
 
 **One realistic fixture.** `tests/machine.py` builds a temp tree with active projects, build
 output, package caches, a locked directory and a symlink all present at once. Bugs live in the
@@ -76,8 +82,8 @@ Hooks are not optional and are not bypassed. If a hook is wrong, fix the hook.
   `path -> ScanNode` library and must stay portable to a CLI or a native shell later.
 - The path catalog is **data** (`sift/catalog/catalog.yaml`), never Python. It is the part
   that accretes value; keep it editable without a code change.
-- The LLM classifier sits behind one interface with a deterministic fake used by every test.
-  **No test may make a network call.** Model behaviour is pinned with recorded fixtures.
+- The LLM sits behind one interface so the provider can be swapped by env var, **not** so it
+  can be faked. Tests call the real thing.
 - Pydantic models in `sift/models.py` are the contract between scanner, classifier, and UI.
   Change them there first; everything else follows.
 
