@@ -22,9 +22,9 @@ Feature: Recognising what a directory is
     And "Sites/old-project/target" can be restored with "cargo build"
 
   Scenario: A directory called target with no Cargo.toml beside it is not assumed to be build output
-    Given a folder "Documents/target" holding 200 KB
+    Given a folder "Sites/notes/target" holding 200 KB
     When I survey the machine
-    Then "Documents/target" is not recognised
+    Then "Sites/notes/target" is not recognised
 
   Scenario: Fixed locations are recognised by their path
     When I survey the machine
@@ -36,6 +36,13 @@ Feature: Recognising what a directory is
     When I survey the machine
     Then "Documents" is irreplaceable
     And "Documents" is never proposed for deletion
+
+  Scenario: A recognised directory is counted without being explored
+    When I survey the machine
+    Then "Sites/client-app/node_modules" reports its full size
+    And nothing inside "Sites/client-app/node_modules" was explored
+    And "Library/Caches" reports its full size
+    And nothing inside "Library/Caches" was explored
 
   Scenario: Nothing the catalog already settled is sent to the model
     When I survey the machine

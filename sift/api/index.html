@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sift</title>
+<style>
+  :root {
+    --ground: #080b12;
+    --surface: #111725;
+    --edge: #1e2739;
+    --text: #e7ebf3;
+    --muted: #7d8aa3;
+    --faint: #4a5670;
+
+    /* Verdicts read as what recovery costs, not as traffic lights. Mint flows
+       back on its own. Amber is unresolved. Ivory is precious — red would say
+       "danger" about the files you most want to keep. */
+    --regenerable: #5eead4;
+    --review: #fbbf57;
+    --irreplaceable: #ede3d0;
+    --unknown: #2b3548;
+
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 18px 26px;
+    border-bottom: 1px solid var(--edge);
+  }
+
+  .wordmark {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .wordmark span { color: var(--faint); }
+
+  form { display: flex; gap: 8px; flex: 1; max-width: 620px; }
+
+  input[type=text] {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  input[type=text]:focus, button:focus-visible {
+    outline: 2px solid var(--regenerable);
+    outline-offset: 1px;
+  }
+
+  button {
+    background: var(--regenerable);
+    color: #04231e;
+    border: 0;
+    border-radius: 5px;
+    padding: 8px 18px;
+    font-weight: 650;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:disabled { background: var(--edge); color: var(--muted); cursor: default; }
+
+  .status {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 430px minmax(0, 1fr);
+    gap: 44px;
+    padding: 30px 26px 60px;
+    align-items: start;
+    max-width: 1240px;
+  }
+  @media (max-width: 940px) { main { grid-template-columns: 1fr; } }
+
+  /* ---- the platter ---- */
+
+  .platter { position: sticky; top: 24px; }
+  svg { width: 100%; max-width: 430px; height: auto; display: block; }
+  svg path { cursor: pointer; transition: opacity .12s; }
+  svg path:hover, svg path:focus { opacity: .72; outline: none; }
+  svg path:focus { stroke: var(--text); stroke-width: 1.5; }
+
+  .readout {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 34px;
+    word-break: break-all;
+  }
+  .readout b { color: var(--text); font-weight: 600; }
+
+  .key { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: var(--muted); }
+  .key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+
+  /* ---- totals ---- */
+
+  .totals { display: flex; gap: 30px; border-bottom: 1px solid var(--edge); padding-bottom: 18px; }
+  .totals div { display: flex; flex-direction: column; gap: 2px; }
+  .totals .n { font-family: var(--mono); font-size: 25px; letter-spacing: -0.02em; }
+  .totals .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+  .safe .n { color: var(--regenerable); }
+  .decide .n { color: var(--review); }
+  .kept .n { color: var(--irreplaceable); }
+
+  /* ---- plan ---- */
+
+  h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .14em;
+    color: var(--muted); font-weight: 600; margin: 28px 0 10px;
+  }
+
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+
+  li {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-left: 2px solid var(--verdict, var(--unknown));
+    border-radius: 5px;
+    padding: 12px 15px;
+  }
+  li .glyph { font-family: var(--mono); color: var(--verdict); font-size: 14px; }
+  li .label { font-weight: 600; }
+  li .size { font-family: var(--mono); color: var(--text); white-space: nowrap; }
+  li .detail { grid-column: 2 / -1; color: var(--muted); font-size: 12.5px; }
+  li .detail code { font-family: var(--mono); color: var(--regenerable); }
+  li.protected .detail code { color: var(--irreplaceable); }
+
+  li.empty {
+    display: block;
+    border: 0;
+    background: none;
+    padding: 2px 0;
+    color: var(--faint);
+    font-size: 13px;
+  }
+
+  .judge { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .judge input { accent-color: var(--regenerable); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark"><span>~/</span>sift</div>
+  <form id="f">
+    <input type="text" id="root" spellcheck="false" aria-label="Folder to survey">
+    <label class="judge"><input type="checkbox" id="judge" checked> ask the model</label>
+    <button type="submit" id="go">Survey</button>
+  </form>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+</header>
+
+<main>
+  <section class="platter" aria-label="Disk map">
+    <svg id="chart" viewBox="0 0 460 460" role="img" aria-label="Directories by size, coloured by what recovery would cost"></svg>
+    <div class="readout" id="readout"></div>
+    <div class="key">
+      <span><i style="background:var(--regenerable)"></i>↺ rebuilds itself</span>
+      <span><i style="background:var(--review)"></i>? needs a decision</span>
+      <span><i style="background:var(--irreplaceable)"></i>✕ can't be replaced</span>
+      <span><i style="background:var(--unknown)"></i>not yet judged</span>
+    </div>
+  </section>
+
+  <section aria-label="Plan">
+    <div class="totals">
+      <div class="safe"><span class="n" id="t-safe">—</span><span class="k">safe to reclaim</span></div>
+      <div class="decide"><span class="n" id="t-decide">—</span><span class="k">needs you</span></div>
+      <div class="kept"><span class="n" id="t-kept">—</span><span class="k">kept back</span></div>
+    </div>
+    <h2>Proposed</h2>
+    <ul id="proposals"><li class="empty" style="border:0;background:none">Run a survey to see what's here.</li></ul>
+    <h2>Kept back</h2>
+    <ul id="protected"></ul>
+  </section>
+</main>
+
+<script>
+const COLOR = {
+  regenerable: 'var(--regenerable)',
+  review: 'var(--review)',
+  irreplaceable: 'var(--irreplaceable)',
+};
+const GLYPH = { regenerable: '↺', review: '?', irreplaceable: '✕' };
+
+const $ = id => document.getElementById(id);
+$('root').value = '~';
+
+function size(n) {
+  if (!n) return '0 B';
+  const u = ['B','KB','MB','GB','TB'];
+  let i = 0, v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (i === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + u[i];
+}
+
+const colorOf = v => COLOR[v] || 'var(--unknown)';
+
+/* ---- the platter: concentric rings, angle proportional to bytes ---- */
+
+function wedge(cx, cy, r0, r1, a0, a1) {
+  const pt = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const big = a1 - a0 > Math.PI ? 1 : 0;
+  const [x0, y0] = pt(r1, a0), [x1, y1] = pt(r1, a1);
+  const [x2, y2] = pt(r0, a1), [x3, y3] = pt(r0, a0);
+  return `M${x0},${y0}A${r1},${r1} 0 ${big} 1 ${x1},${y1}L${x2},${y2}A${r0},${r0} 0 ${big} 0 ${x3},${y3}Z`;
+}
+
+function draw(tree) {
+  const svg = $('chart'), C = 230;
+  svg.innerHTML = '';
+  const arcs = [];
+  (function place(node, depth, a0, a1) {
+    if (depth > 0) arcs.push({ node, depth, a0, a1 });
+    const whole = node.size_bytes || 1;
+    let a = a0;
+    for (const child of node.children || []) {
+      // Children can sum to less than their parent — loose files, pruned slivers.
+      // Leaving that arc empty is more honest than stretching the rest to fill it.
+      const w = (a1 - a0) * (child.size_bytes / whole);
+      place(child, depth + 1, a, a + w);
+      a += w;
+    }
+  })(tree, 0, -Math.PI / 2, Math.PI * 1.5);
+
+  for (const { node, depth, a0, a1 } of arcs) {
+    if (a1 - a0 < 0.004) continue;
+    const r0 = 62 + (depth - 1) * 40, r1 = r0 + 35;
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', wedge(C, C, r0, r1, a0, a1));
+    p.setAttribute('fill', colorOf(node.verdict));
+    p.setAttribute('fill-opacity', node.verdict ? 0.88 : 0.5);
+    p.setAttribute('stroke', 'var(--ground)');
+    p.setAttribute('stroke-width', '1');
+    p.setAttribute('tabindex', '0');
+    p.setAttribute('role', 'listitem');
+    p.setAttribute('aria-label', `${node.path}, ${size(node.size_bytes)}, ${node.verdict || 'not yet judged'}`);
+    const show = () => {
+      $('readout').innerHTML =
+        `<b>${size(node.size_bytes)}</b> &nbsp;${node.path}` +
+        (node.verdict ? ` &nbsp;·&nbsp; ${node.verdict}` : '');
+    };
+    p.addEventListener('mouseenter', show);
+    p.addEventListener('focus', show);
+    svg.appendChild(p);
+  }
+
+  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  t.setAttribute('x', C); t.setAttribute('y', C + 5);
+  t.setAttribute('text-anchor', 'middle');
+  t.setAttribute('fill', 'var(--text)');
+  t.setAttribute('style', 'font-family:var(--mono);font-size:21px');
+  t.textContent = size(tree.size_bytes);
+  svg.appendChild(t);
+}
+
+/* ---- plan ---- */
+
+function row(item, kind) {
+  const li = document.createElement('li');
+  li.className = kind;
+  li.style.setProperty('--verdict', colorOf(item.verdict));
+  const where = item.paths.length > 1
+    ? `${item.paths.length} directories`
+    : item.paths[0];
+  li.innerHTML =
+    `<span class="glyph">${GLYPH[item.verdict] || '·'}</span>` +
+    `<span class="label"></span>` +
+    `<span class="size">${size(item.size_bytes)}</span>` +
+    `<span class="detail"></span>`;
+  li.querySelector('.label').textContent = item.label;
+
+  // Paths and model reasons are user data; build them as text, never as markup.
+  const detail = li.querySelector('.detail');
+  detail.append(where);
+  if (item.reason) {
+    detail.append(document.createElement('br'));
+    detail.append(item.reason);
+  }
+  detail.append(document.createElement('br'));
+  const code = document.createElement('code');
+  code.textContent = item.restore + (item.restore_time ? ` · ${item.restore_time}` : '');
+  detail.append(code);
+  return li;
+}
+
+function render(plan) {
+  $('t-safe').textContent = size(plan.reclaimable_bytes);
+  $('t-decide').textContent = size(plan.needs_review_bytes);
+  $('t-kept').textContent = size(plan.protected.reduce((s, i) => s + i.size_bytes, 0));
+
+  const props = $('proposals'), prot = $('protected');
+  props.innerHTML = ''; prot.innerHTML = '';
+  if (!plan.proposals.length) props.innerHTML = '<li class="empty">Nothing here can be safely reclaimed.</li>';
+  if (!plan.protected.length) prot.innerHTML = '<li class="empty">Nothing here needed protecting.</li>';
+  plan.proposals.forEach(i => props.appendChild(row(i, 'proposal')));
+  plan.protected.forEach(i => prot.appendChild(row(i, 'protected')));
+}
+
+/* ---- survey ---- */
+
+let stream;
+$('f').addEventListener('submit', e => {
+  e.preventDefault();
+  if (stream) stream.close();
+  $('go').disabled = true;
+  $('readout').textContent = '';
+  let seen = 0;
+
+  stream = new EventSource('/api/survey?root=' + encodeURIComponent($('root').value)
+    + '&judge=' + ($('judge').checked ? 'true' : 'false'));
+
+  stream.addEventListener('directory', ev => {
+    seen++;
+    // A big projects folder emits tens of thousands of these. Repainting on every
+    // one costs more than the survey does.
+    if (seen % 50 === 0 || seen < 10) {
+      $('status').textContent = `${seen.toLocaleString()} directories · ${JSON.parse(ev.data).name}`;
+    }
+  });
+
+  stream.addEventListener('judging', ev => {
+    const { count } = JSON.parse(ev.data);
+    $('status').textContent = `${seen} directories · asking about ${count}…`;
+  });
+
+  stream.addEventListener('done', ev => {
+    const d = JSON.parse(ev.data);
+    draw(d.chart);
+    render(d.plan);
+    $('status').textContent = `${seen} directories surveyed`;
+    $('go').disabled = false;
+    stream.close();
+  });
+
+  stream.onerror = () => {
+    $('status').textContent = 'Survey stopped. Check the path is readable.';
+    $('go').disabled = false;
+    stream.close();
+  };
+});
+</script>
+</body>
+</html>

@@ -76,6 +76,26 @@ def never_proposed(reports: list[ScanNode], machine: Machine, relpath: str) -> N
     assert machine.path(relpath) not in {c.path for c in _candidates(reports)}
 
 
+@then(parsers.parse('"{relpath}" reports its full size'))
+def reports_full_size(reports: list[ScanNode], machine: Machine, relpath: str) -> None:
+    node = _node(reports, machine, relpath)
+    on_disk = sum(
+        path.stat().st_size for path in machine.path(relpath).rglob("*") if path.is_file()
+    )
+    assert on_disk > 0, "the fixture directory should contain something"
+    assert node.size_bytes == on_disk
+
+
+@then(parsers.parse('nothing inside "{relpath}" was explored'))
+def nothing_inside_explored(reports: list[ScanNode], machine: Machine, relpath: str) -> None:
+    settled = machine.path(relpath)
+    assert not _node(
+        reports, machine, relpath
+    ).children, "a directory the catalog already named needs its total, not its contents"
+    inside = [node for node in reports if settled in node.path.parents]
+    assert not inside, f"{len(inside)} nodes were built inside an already-settled directory"
+
+
 # ------------------------------------------------ what reaches the model ----
 
 

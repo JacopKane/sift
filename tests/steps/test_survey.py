@@ -16,6 +16,10 @@ def directories_sum_their_children(reports: list[ScanNode]) -> None:
     for node in all_nodes(tree_of(reports)):
         if not node.is_dir:
             continue
+        if node.verdict is not None:
+            # Counted whole rather than explored: the catalog already named it, so
+            # its total is measured directly and it has no children to sum.
+            continue
         assert node.size_bytes == sum(child.size_bytes for child in node.children)
         assert node.allocated_bytes == sum(child.allocated_bytes for child in node.children)
 

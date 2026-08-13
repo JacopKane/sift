@@ -46,4 +46,3 @@ Feature: Turning verdicts into something you can act on
     Then no proposal covers a path inside another proposal
     And "Library/Caches" is proposed
     And "Library/Caches/pip" is not proposed
-    And the reclaimable total counts "Library/Caches/pip" only once

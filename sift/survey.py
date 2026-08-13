@@ -30,10 +30,18 @@ def survey(
     exclude: Collection[Path] = (),
     home: Path | None = None,
 ) -> Iterator[ScanNode]:
-    """Report each entry under *root*, carrying a verdict where the catalog knows one."""
+    """Report each entry under *root*, carrying a verdict where the catalog knows one.
+
+    A directory the catalog can name is counted but not explored. Its contents are
+    already accounted for by the verdict on the whole, and enumerating them would
+    mean describing every file in every node_modules on the disk to learn nothing.
+    """
     catalog = load_catalog(home)
 
-    for node in walk(root, exclude):
+    def already_named(path: Path) -> bool:
+        return catalog.recognise(path, is_dir=True) is not None
+
+    for node in walk(root, exclude, prune=already_named):
         rule = catalog.recognise(node.path, is_dir=node.is_dir)
         if rule is not None:
             node.rule_id = rule.id
