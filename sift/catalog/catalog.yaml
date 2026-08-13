@@ -128,6 +128,37 @@ rules:
 
   # ------------------------------------------------------------- protected ----
   # These exist so the answer is "never", stated, rather than "unknown", inferred.
+
+  # Source next to its manifest is source. This is a rule and not a judgement
+  # because a model got it wrong in a way that would have destroyed work: asked
+  # about a src/ directory, gpt-5.4-mini called it regenerable and offered
+  # "npm run build" as the way to get it back. A build consumes source, it does
+  # not produce it. Anything knowable from the filesystem should never be put to
+  # a model, and this is knowable.
+  - id: source-node
+    label: source
+    match: "**/src"
+    requires_sibling: package.json
+    verdict: irreplaceable
+    restore: null
+    restore_time: null
+
+  - id: source-rust
+    label: source
+    match: "**/src"
+    requires_sibling: Cargo.toml
+    verdict: irreplaceable
+    restore: null
+    restore_time: null
+
+  - id: source-python
+    label: source
+    match: "**/src"
+    requires_sibling: pyproject.toml
+    verdict: irreplaceable
+    restore: null
+    restore_time: null
+
   - id: documents
     label: Documents
     match: "~/Documents"

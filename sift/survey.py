@@ -152,7 +152,14 @@ def _descendants(node: ScanNode) -> Iterator[ScanNode]:
 
 
 def _describe_files(parent: ScanNode, files: list[ScanNode]) -> Candidate:
-    """A candidate covering exactly the given files, and nothing else in *parent*."""
+    """A candidate covering exactly the given files, and nothing else in *parent*.
+
+    It is named after the directory, because that is what the model can reason
+    about — but everything in that directory it does not cover has to be listed as
+    excluded. Without that, reclaiming "the loose files in client-app" would take
+    src/ with it, which the same plan marks as never-delete.
+    """
+    covered = {file.path for file in files}
     extensions: dict[str, int] = {}
     for file in files:
         suffix = file.path.suffix.lower() or "(none)"
@@ -166,7 +173,7 @@ def _describe_files(parent: ScanNode, files: list[ScanNode]) -> Candidate:
         label=f"loose files in {parent.name}",
         size_bytes=sum(file.size_bytes for file in files),
         file_count=len(files),
-        excluding=[],
+        excluding=sorted(child.path for child in parent.children if child.path not in covered),
         extensions=dict(sorted(extensions.items(), key=lambda kv: kv[1], reverse=True)),
         largest_files=[FileSummary(name=f.name, size_bytes=f.size_bytes) for f in largest],
     )

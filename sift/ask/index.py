@@ -58,18 +58,24 @@ class Index:
         withheld = len(matched) - len(allowed)
         allowed.sort(key=lambda node: node.size_bytes, reverse=True)
 
+        # A protected directory is counted but never explored, so none of its files
+        # are in the index. Without this a query aimed at one comes back empty and
+        # the honest-sounding answer is "there is nothing there" — when the truth
+        # is "that is off limits". Naming the directory closes that gap.
+        aimed_at = sorted(
+            str(path)
+            for path in self._protected
+            if path_contains and path_contains.lower() in str(path).lower()
+        )
+
         return {
             "files": [
                 {"path": str(node.path), "name": node.name, "size_bytes": node.size_bytes}
                 for node in allowed[:limit]
             ],
             "withheld_because_protected": withheld,
-            "note": (
-                f"{withheld} matching file(s) are protected and cannot be selected or "
-                "deleted. Tell the person this rather than saying nothing was found."
-                if withheld
-                else ""
-            ),
+            "protected_directories_matched": aimed_at,
+            "note": _note(aimed_at, withheld),
         }
 
     def summary(self) -> dict[str, object]:
@@ -89,6 +95,19 @@ class Index:
                 {"name": n.name, "size_bytes": n.size_bytes, "path": str(n.path)} for n in biggest
             ],
         }
+
+
+def _note(directories: list[str], files: int) -> str:
+    """What to tell the model about anything it matched but may not have."""
+    off_limits = [*directories]
+    if files:
+        off_limits.append(f"{files} file(s)")
+    if not off_limits:
+        return ""
+    return (
+        f"Protected and off limits: {', '.join(off_limits)}. Say they are protected. "
+        "Do not say nothing was found — that is a different answer, and it is not true."
+    )
 
 
 def _walk(node: ScanNode) -> list[ScanNode]:

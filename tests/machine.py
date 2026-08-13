@@ -24,6 +24,9 @@ FILES: dict[str, int] = {
     "Sites/client-app/node_modules/react/index.js": 300 * KB,
     "Sites/client-app/node_modules/lodash/index.js": 700 * KB,
     "Sites/client-app/node_modules/.bin/tsc": 40 * KB,
+    # No manifest beside it, so no rule claims it: this is what a genuinely
+    # opaque directory looks like, and it is what the model gets asked about.
+    "Sites/client-app/mockups/home-v3.png": 180 * KB,
     # An older one, with a Cargo.toml sitting beside its target/ directory.
     "Sites/old-project/Cargo.toml": 1 * KB,
     "Sites/old-project/src/lib.rs": 12 * KB,

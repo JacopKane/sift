@@ -37,6 +37,11 @@ Rules:
   either, which hides space they could safely have reclaimed. `review` means: there
   is something here worth keeping and something worth reclaiming, so a human should
   look. Say which is which in the reason.
+- If your reasoning contains an "if" you cannot check, the answer is `review`.
+  "An archive can be recreated if the source project still exists" is a guess
+  about something you were not shown, and betting on it deletes the only copy.
+  You may only say `regenerable` when the thing that rebuilds it is visible in
+  what you were given, or is a tool everyone has.
 - `restore` is always filled in. For `regenerable`, give the actual command. For
   `irreplaceable`, say plainly that it cannot be restored.
 - Judge from the contents you are shown — the extensions, the largest file names,

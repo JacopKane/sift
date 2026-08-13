@@ -22,15 +22,23 @@ repos:
         args: [--maxkb=512]
       - id: detect-private-key
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
-    hooks:
-      - id: ruff-format
-      - id: ruff
-        args: [--fix]
-
   - repo: local
     hooks:
+      # The project's own ruff, not a pinned copy. A separately versioned hook
+      # formats differently from the one in the venv, so every commit reformatted
+      # what the last run had just formatted.
+      - id: ruff-format
+        name: ruff format
+        entry: .venv/bin/ruff format
+        language: system
+        types: [python]
+
+      - id: ruff
+        name: ruff
+        entry: .venv/bin/ruff check --fix
+        language: system
+        types: [python]
+
       # always_run, deliberately. With `types: [python]` these are skipped on any
       # commit that touches no Python — and a README that describes behaviour the
       # code no longer has is exactly the kind of drift worth catching.

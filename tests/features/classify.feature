@@ -26,10 +26,10 @@ Feature: Asking a model about what the catalog could not name
     Then "Archive" is not regenerable
 
   @slow
-  Scenario: Source you wrote yourself is never called disposable
+  Scenario: An opaque folder of work is never called disposable
     When I survey the machine
     And I ask the model about the candidates
-    Then "Sites/client-app/src" is not regenerable
+    Then "Sites/client-app/mockups" is not regenerable
 
   @slow
   Scenario: A directory holding both disposable and irreplaceable things is flagged for a human
@@ -42,7 +42,7 @@ Feature: Asking a model about what the catalog could not name
   Scenario: A directory of only irreplaceable things is not hedged as needing review
     When I survey the machine
     And I ask the model about the candidates
-    Then "Sites/client-app/src" is irreplaceable
+    Then "Archive" is irreplaceable
 
   @slow
   Scenario: Calling something regenerable means saying how to get it back

@@ -32,6 +32,12 @@ Feature: Recognising what a directory is
     And "Library/Caches" is regenerable
     And ".npm/_cacache" is regenerable
 
+  Scenario: Source next to its manifest is protected by rule, never by judgement
+    When I survey the machine
+    Then "Sites/client-app/src" is irreplaceable
+    And "Sites/old-project/src" is irreplaceable
+    And "Sites/client-app/src" is never proposed for deletion
+
   Scenario: Personal directories are protected by the catalog, not merely unrecognised
     When I survey the machine
     Then "Documents" is irreplaceable
@@ -53,7 +59,7 @@ Feature: Recognising what a directory is
   Scenario: The model is asked about opaque directories, not about every directory
     When I survey the machine
     Then "Archive" is a candidate
-    And "Sites/client-app/src" is a candidate
+    And "Sites/client-app/mockups" is a candidate
     And candidates are offered largest first
     And no candidate counts bytes another candidate already counted
     And the model is asked about fewer than 10 directories
@@ -62,7 +68,7 @@ Feature: Recognising what a directory is
     When I survey the machine
     Then "Sites" is not a candidate
     And "Library" is not a candidate
-    And "Sites/client-app/src" is a candidate
+    And "Sites/client-app/mockups" is a candidate
 
   Scenario: A file is never mistaken for the directory a rule names
     Given a file "Sites/another/Cargo.toml" of 1 KB
