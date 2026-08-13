@@ -105,6 +105,44 @@ tests/
   steps/               Step definitions
 ```
 
+## Looking at the app in a real browser
+
+Use the `chrome-devtools` MCP server. By default it launches its own empty Chrome
+with none of the real logins — if `list_pages` shows only `about:blank`, you are on
+that isolated instance and should stop and fix the attach before going further.
+
+Since Chrome 136 the *Default* profile refuses remote debugging, so a dedicated
+`--user-data-dir` is required. The persistent one is `~/.chrome-debug`, sub-profile
+`Profile 1`. **Never delete it** — it holds the real signed-in sessions.
+
+```bash
+pkill -f "user-data-dir=$HOME/.chrome-debug"    # a second launch on a live dir won't bind the port
+nohup "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.chrome-debug" \
+  --profile-directory="Profile 1" \
+  --restore-last-session --no-first-run --no-default-browser-check \
+  >/dev/null 2>&1 &
+
+curl -s --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:9222/json/version
+```
+
+The MCP config already passes `--browserUrl=http://127.0.0.1:9222`, which is the
+reliable way to attach. `--autoConnect` has been seen to fall back to launch mode
+and fail even when a debuggable Chrome is up.
+
+While driving it:
+
+- `take_snapshot` before interacting — it returns the a11y tree with the `uid`s you
+  click and fill. Cheaper than a screenshot; screenshot only to check visuals.
+- A click that reports "did not become interactive" may still have worked. Take a
+  fresh snapshot and check the actual state before clicking again.
+- Downloads are blocked in a CDP-driven instance. Read the data out of the DOM.
+- Values behind copy-to-clipboard buttons are usually in the button's accessible
+  label — read them from the snapshot rather than clicking copy.
+- OAuth redirects to `localhost` show a connection error in the page, but the full
+  callback URL with `code=` appears in the `list_pages` listing.
+
 ## Stack
 
 Python 3.12, FastAPI, Pydantic v2, pytest + pytest-bdd, ruff, mypy.

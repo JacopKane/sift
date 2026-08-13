@@ -1,256 +1,112 @@
 # Sift
 
-**Disk cleanup that asks instead of guessing.**
-
-You tell it what you need. It works out what it can, asks about what it can't, and shows you the whole picture before anything moves.
-
-> **Status:** in development. What runs today is listed under [Where it stands](#where-it-stands);
-> everything else on this page is the v1 target, not a description of the build.
+**Reclaims disk space and knows what not to touch.**
 
 ---
 
-## The problem
+## Run it
 
-You're out of space. Your disk visualizer draws a beautiful map:
-
-```
-41.2 GB   ~/Library/Containers/com.docker.docker/.../Docker.raw
-12.4 GB   ~/Sites/client-app/node_modules
-12.1 GB   ~/Archive/clients-2021
+```bash
+uvx --from git+https://github.com/JacopKane/sift sift
 ```
 
-Now what?
+That's it. It starts, opens your browser, and begins surveying. No config screen, no empty state.
 
-- **It answers the wrong question.** You learn *where* your space went, never *which of these is safe to delete*.
-- **Size and disposability are unrelated.** The last two are nearly the same size — one is `npm install` away from full restoration, the other might be the only copy.
-- **And the deciding fact isn't on the disk.** Whether `clients-2021` still matters was never written anywhere. No scanner recovers it, however thorough.
+Want the model to judge what the rules can't name? Add a key:
 
-That last point is the whole design. **The missing information is in your head, so the tool has to ask.**
+```bash
+cp .env.example .env      # then paste one key: Gemini, OpenAI, or Claude
+```
+
+Survey a different folder: `sift ~/Projects` · Whole disk: `sift /`
 
 ---
 
-## How it works
+## What it does
 
-1. **You say what you want.** *"Free 80 GB, but I'm mid-sprint on the Rust project."*
-2. **It surveys while you type.** The walk takes seconds, so by the time you've finished the sentence it already knows your disk.
-3. **It resolves what it can.** Known caches and build artifacts are settled instantly, with no model involved.
-4. **It asks about what it can't.** Only where it's genuinely uncertain and the stakes are real — never about things a filename already answers.
-5. **You review the map.** Everything it proposes, coloured by what you can get back, visible at once.
-6. **You approve.** Items move to quarantine. `sift undo` puts them back.
-
----
-
-## Design decisions
-
-**The conversation is the product — and every question has to be earned.**
-An agent that asks what it could have worked out is ceremony, and worse than silence. Questions are gated on three conditions at once: genuinely uncertain, large enough to matter, and not obviously regenerable. A 200 MB mystery folder gets marked amber; a 40 GB one gets asked about.
-
-**The map is the final review, not the exploration surface.**
-Other tools open with the chart and leave you to interpret it. Sift earns the chart: by the time you see it, every arc has a verdict and a reason. It's the last look before you commit, not a puzzle to solve.
-
-**Regenerability is the unit, not size.**
-Every proposal carries what you need in order to decide:
-
-```
-47 node_modules directories      31.2 GB  🟢 ↺  npm install         ~4 min
-Xcode DerivedData                18.7 GB  🟢 ↺  rebuilds on open    ~90 sec
-~/Archive/clients-2021            8.1 GB  🔴 ✕  cannot be restored
-```
-
-Verdict is never carried by colour alone — each level has its own glyph, so the distinction survives colour blindness and greyscale.
-
-**It reasons from metadata, never from your files.**
-Extensions, locations, sibling markers, naming patterns. A `Cargo.toml` beside `target/` settles it; 95% `.o` files settles it. **No file contents are ever read or sent anywhere** — when metadata runs out, it asks you rather than opening the file.
-
-Being precise, because the distinction matters: **file and folder names do go to the model**, along with sizes and extensions. That is what it reasons from. Contents never leave your machine.
-
-**Nothing is ever deleted.**
-Reclaiming *moves* paths into quarantine alongside a manifest of where each came from. There is no code path in this repo that deletes a file. Emptying quarantine is a separate act you perform.
-
-**Permission failures are a designed state.**
-Default scan roots need no macOS permission at all, so Sift is useful seconds after launch. Blocked folders appear as cards with a grant button, never as stack traces. Full Disk Access is an upgrade, not a prerequisite.
+- **Finds what's big.** Walks a folder or the whole disk, streaming results as it counts.
+- **Says what's safe.** Every item gets a verdict: rebuilds itself, needs a decision, or can't be replaced.
+- **Tells you how to get it back.** `npm install`. `cargo build`. Or plainly: cannot be restored.
+- **Takes plain requests.** *"Delete the app installers I already installed"* → the two `.dmg` files, nothing else.
+- **Never deletes.** Reclaiming moves things to quarantine. `undo` puts them back.
 
 ---
 
-## The review screen
+## Why it's different
 
-```
-     🟢 ↺ regenerable    🟡 ? worth a look    🔴 ✕ irreplaceable
+Disk tools show you *where* your space went. None of them tell you *what's safe to delete*.
 
-  ┌────────────────────────────┬─────────────────────────┐
-  │         ╭───────╮          │  Plan · 84.3 GB         │
-  │      ╭──┤ 🟢🟢🟡├──╮       │  ┌───────────────────┐  │
-  │      │  ╰───────╯  │       │  │ ◉ 47 node_modules │  │
-  │      │   🔴   🟢   │       │  │   31.2 GB    🟢 ↺ │  │
-  │      ╰─────────────╯       │  │   ↩ npm i   ~4min │  │
-  │                            │  └───────────────────┘  │
-  │   ‹ Home / Library         │  ┌───────────────────┐  │
-  │     tab to walk arcs       │  │ ○ DerivedData     │  │
-  ├────────────────────────────┴─────────────────────────┤
-  │  reclaimable 84.3 GB · scanned 412 GB · 3 skipped 🔒 │
-  └──────────────────────────────────────────────────────┘
-```
-
-The chart is not the only way to read this. Every arc is reachable by keyboard, and the same data is available as a plain table for screen readers — the visualization is an enhancement, never the sole channel.
+A 12 GB `node_modules` and 12 GB of holiday photos look identical on a size chart. One is `npm install` away from coming back. The other is gone forever. **Sift sorts by what you can get back.**
 
 ---
 
-## Where the AI is — and where it deliberately isn't
+## The verdicts
 
-Each level only ever sees what the level above couldn't resolve.
-
-| Level | What | Cost |
+| | | |
 |---|---|---|
-| Walk the tree, sizes, timestamps | `os.scandir` | free |
-| **Catalog** — ~40 known paths: caches, build artifacts, Docker, Trash | static `catalog.yaml` | free, instant |
-| **Classify** — unresolved directories, from metadata alone | one batched call | small |
-| **Ask** — genuine uncertainty, high stakes only | a few turns | rare by design |
-| Aggregate, order, total | plain Python | free |
+| ↺ | **rebuilds itself** | a command brings it back — deleting costs only time |
+| ? | **needs a decision** | mixed, or genuinely unclear — look before you act |
+| ✕ | **can't be replaced** | no command reproduces this |
 
-Two optimizations do most of the work: **directories are classified, not files** — you ask about the ~50 that didn't resolve, not the 47,000 beneath them — and the catalog settles the majority of reclaimable bytes before a model is ever invoked.
+Colour is never the only signal — each verdict has its own glyph and its own words.
 
 ---
 
-## Architecture
+## Safety
 
-```
-   you ──▶ chat
-            │
-            ▼
-     ┌──────────────┐
-     │    survey    │   walk + catalog — starts while you type
-     └──────┬───────┘
-            ▼
-     ┌──────────────┐
-     │   classify   │   metadata only, one batched call
-     └──────┬───────┘
-            ▼
-       ⏸  ask you      only when uncertain and it matters
-            │
-            ▼
-     ┌──────────────┐
-     │     plan     │   aggregate by rule, order by risk
-     └──────┬───────┘
-            ▼
-       ⏸  review      the map, coloured, whole plan at once
-            │
-            ▼
-     ┌──────────────┐
-     │  quarantine  │   move + manifest + undo
-     └──────────────┘
-```
-
-- Two pauses, both genuine: one for questions, one for approval. State survives both.
-- `scanner/` is a pure library with no web or AI imports, so it stays portable to a CLI or native shell.
-- The model provider is set by environment variable — Gemini, Claude, or GPT, same graph.
+- **Nothing is deleted.** Reclaiming *moves* to quarantine with a manifest. Emptying it is your separate, deliberate act.
+- **Protected by rule, not by guess.** `~/Documents`, `~/Desktop`, `~/Pictures`, `~/.ssh`, and any `src/` beside a manifest.
+- **Warnings, not locks.** You can override any of it — it's your disk. The override is recorded on the receipt.
+- **Your files stay put.** Names, sizes and extensions go to the model. File contents never leave your machine.
 
 ---
 
-## MVP scope
+## Cost
 
-**In**
-
-- Filesystem survey, reported as it walks
-- Static catalog of known paths and verdicts
-- Metadata classification of unresolved directories, batched into one call
-- Conversational clarification when — and only when — uncertainty is real
-- Free-form prompts against the survey (*"get rid of the large videos"*)
-- Review map, verdict-coloured, keyboard navigable, with a table equivalent
-- Per-item approval, reclaim to quarantine, `undo`
-- Two entry points: local survey, and drag-a-folder in the browser
-
-**Out, and why**
-
-| Deferred | Reasoning |
-|---|---|
-| Reading file contents | Asking you is cheaper, faster, and keeps the privacy promise absolute |
-| Content-hash duplicate detection | Real work, and an orthogonal thesis — regenerability first |
-| Background / scheduled scans | Turns a tool you open into a daemon you maintain |
-| Windows and Linux | The catalog is the moat and it's platform-specific |
-| Multi-volume, network drives | Long tail of edge cases, small share of the problem |
-| Native app shell | Correct eventually — but it's packaging, not product |
-| Accounts, sync, teams | A local disk tool needs no server-side identity |
-
-v1 does one thing completely — understand what your files mean to *you*, and act on it — rather than six things partially.
+- The rules settle most of a disk for **zero tokens**.
+- A model is asked only about what the rules can't name — one batched call.
+- One free-form question costs 3–6 calls. On a free Gemini key set `SIFT_REQUESTS_PER_MINUTE=12`.
 
 ---
 
-## Running it
+## Switching models
 
-**Analyze a folder — nothing to install.** *(planned, not built)*
-Open the hosted build and drag a directory onto the page. The browser walks the tree locally and sends only a manifest of names and sizes.
-
-**Analyze your whole machine.**
+Two lines in `.env`. Gemini, OpenAI and Claude are the same code path.
 
 ```bash
-uv sync
-cp .env.example .env        # add a key for whichever provider you pick
-uv run uvicorn "sift.api:create_app" --factory --port 8765
+SIFT_PROVIDER=openai        # or google_genai, anthropic
+SIFT_MODEL=gpt-5.4-mini
 ```
 
-Then open `http://127.0.0.1:8765`. A single packaged command is on the roadmap; this is what runs today.
-
-**Choosing a model.** Set two environment variables; nothing else changes.
-
-```bash
-SIFT_PROVIDER=google_genai   # or anthropic, openai
-SIFT_MODEL=gemini-2.0-flash
-```
+Worth knowing: two frontier models disagreed about whether it's safe to delete a `src/` directory. That's why source is protected by a rule and never put to a model.
 
 ---
 
-## Development
-
-Test-first, without exception. Behaviour is specified in Gherkin before it is implemented — see [CLAUDE.md](CLAUDE.md) for the full rules.
+## Developing
 
 ```bash
-uv sync
-pre-commit install && pre-commit install --hook-type pre-push
-
-pytest                 # full suite
-pytest -m "not slow"   # fast suite, matches the pre-commit hook
+uv sync && uv run sift
 ```
 
-- Every commit runs formatting, linting, type checks, and the fast suite.
-- Every push runs the full suite, which calls the real model — nothing is mocked, so a passing
-  suite means the thing actually works.
-- Model assertions are about properties, never exact strings, because real responses vary.
+```bash
+.venv/bin/pytest -m "not slow"   # 60 scenarios, ~3s, no network
+.venv/bin/pytest -m slow         # calls the real model
+```
+
+Test-first in Gherkin, nothing mocked — not the filesystem, not the model. See [CLAUDE.md](CLAUDE.md).
+
+Rebuild the frontend after changing it: `cd web && npm run build`
 
 ---
 
-## Where it stands
+## Not built yet
 
-**Working, end to end, against real disks — nothing mocked at any layer.**
-
-- **Survey** — walks a folder or a whole boot volume, streaming each directory as it is counted. Symlinks skipped, unreadable directories kept in the tree with a flag, apparent and on-disk sizes tracked separately. A directory the catalog can already name is counted but not explored.
-- **Catalog** — ~20 rules over known paths, matched by glob with sibling markers. Settles the common cases for nothing, and protects `~/Documents`, `~/Desktop`, `~/Pictures` and `~/.ssh` by rule.
-- **Classify** — one batched call judges whatever the catalog could not name, from metadata alone.
-- **Ask** — free-form requests answered by an agent with query tools over the survey. *"Delete the app installers I already installed"* returns the two `.dmg` files and nothing else.
-- **Plan** — grouped by rule, largest first, with what is safe separated from what needs a decision.
-- **Map and page** — verdict-coloured sunburst served over SSE by FastAPI.
-
-**Not built yet.**
-
-- **Reclaiming.** The plan is read-only. Quarantine, the manifest, and `undo` do not exist — nothing can be moved or deleted, by design and by omission both.
-- **The conversation.** Free-form asking works, but the graph does not yet pause to ask *you* a question when it is uncertain. Both interrupts are designed, neither is wired.
-- **Drag-a-folder in the browser.** Local surveys only so far.
-- **The `uvx` one-liner.** Run it with `uvx uvicorn "sift.api:create_app" --factory` for now.
-
-**Known limits.**
-
-- **Speed.** A 1.5M-file projects folder takes ~95s. Pruning already recognised directories cut objects eightfold, but the remaining cost is `stat` syscalls — threading is the fix, and it is not done.
-- **Frontend.** One hand-written HTML file. Not yet responsive, and keyboard reachability is partial.
-- **Requests.** One agent question spends three to six model calls. On a free Gemini key, set `SIFT_REQUESTS_PER_MINUTE=12`.
-
-## Roadmap
-
-- **Native shell.** A Tauri wrapper gets real drag-and-drop with absolute paths, an app icon, and small signed binaries.
-- **Learned catalog.** Your answers — *"this is safe"*, *"never touch this"* — feed back in, so it asks you the same question only once.
-- **Duplicate and version detection** by content hash, as a second lens on the same survey.
-- **Linux and Windows catalogs.**
+- Reading file contents — it asks you instead
+- Windows and Linux catalogs
+- A native app shell
 
 ---
 
 ## License
 
-MIT — use it, change it, ship it. The licence asks one thing in return: keep the copyright line, so credit travels with the code. See [LICENSE](LICENSE).
+MIT. Use it, change it, ship it — just keep the copyright line so credit travels with the code.
