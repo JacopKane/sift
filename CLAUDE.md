@@ -10,8 +10,17 @@ for it. If you catch yourself writing a function with no red test behind it, sto
 the test.
 
 **BDD style.** Behaviour lives in Gherkin `.feature` files under `tests/features/`, written
-in the user's language, not the code's. Step definitions bind them to the system. Unit tests
-exist only for things a scenario can't reasonably reach (parsers, size arithmetic, edge cases).
+in the user's language, not the code's. Step definitions bind them to the system.
+
+**Fat integration tests, not unit tests.** Every test exercises real code paths end to end —
+real filesystem, real graph, real API, real HTTP — against a fixture that resembles a real
+machine. Fakes exist at exactly **one** boundary: the network. Never mock the filesystem,
+never stub a layer of our own code, never assert on a constant. Prefer one scenario that
+proves something true about the whole system over five that each poke at a part of it.
+
+**One realistic fixture.** `tests/machine.py` builds a temp tree with active projects, build
+output, package caches, a locked directory and a symlink all present at once. Bugs live in the
+interaction between those, and a two-file fixture never exercises the interaction.
 
 **Never `unlink`.** Reclaiming moves paths into a quarantine directory with a manifest.
 Deletion is the user emptying quarantine, never us. There is no code path in this repo that
@@ -85,9 +94,9 @@ sift/
   api/                 FastAPI, SSE
 web/                   SvelteKit frontend
 tests/
+  machine.py           The realistic fixture everything runs against
   features/            Gherkin scenarios
   steps/               Step definitions
-  unit/                Narrow tests only
 ```
 
 ## Stack
