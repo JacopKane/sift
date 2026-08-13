@@ -1,0 +1,149 @@
+"""Steps for tests/features/endpoints.feature.
+
+Real HTTP against the real app, over a real temp filesystem, with quarantine
+pointed somewhere disposable. Nothing here calls a model.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+from pytest_bdd import parsers, scenarios, then, when
+
+from sift.api import create_app
+from tests.machine import Machine
+
+scenarios("endpoints.feature")
+
+
+@pytest.fixture
+def client(machine: Machine) -> TestClient:
+    return TestClient(
+        create_app(
+            home=machine.root,
+            quarantine=machine.root.parent / f"quarantine-{machine.root.name}",
+        )
+    )
+
+
+@when("the browser surveys the machine")
+def browser_surveys_for_endpoints(client: TestClient, machine: Machine) -> None:
+    response = client.get("/api/survey", params={"root": str(machine.root)})
+    assert response.status_code == 200
+
+
+@when(parsers.parse('the browser baskets "{relpath}"'), target_fixture="reply")
+def browser_baskets(client: TestClient, machine: Machine, relpath: str) -> Any:
+    return client.post(
+        "/api/basket", json={"root": str(machine.root), "path": str(machine.path(relpath))}
+    )
+
+
+@when(parsers.parse('the browser insists on basketing "{relpath}"'), target_fixture="reply")
+def browser_insists(client: TestClient, machine: Machine, relpath: str) -> Any:
+    return client.post(
+        "/api/basket",
+        json={"root": str(machine.root), "path": str(machine.path(relpath)), "override": True},
+    )
+
+
+@when("the browser empties the basket", target_fixture="emptied")
+def browser_empties(client: TestClient, machine: Machine) -> dict[str, Any]:
+    response = client.post("/api/basket/empty", params={"root": str(machine.root)})
+    assert response.status_code == 200, response.text
+    return dict(response.json())
+
+
+@when("the browser asks for duplicates", target_fixture="duplicates")
+def browser_asks_duplicates(client: TestClient, machine: Machine) -> dict[str, Any]:
+    response = client.get("/api/duplicates", params={"root": str(machine.root)})
+    assert response.status_code == 200, response.text
+    return dict(response.json())
+
+
+@when("the browser sends a dropped folder", target_fixture="dropped")
+def browser_sends_dropped(client: TestClient) -> dict[str, Any]:
+    response = client.post(
+        "/api/dropped",
+        json={
+            "name": "dropped-project",
+            "files": [
+                {"path": "package.json", "size_bytes": 2048},
+                {"path": "node_modules/react/index.js", "size_bytes": 900_000},
+                {"path": "src/main.ts", "size_bytes": 6000},
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    return dict(response.json())
+
+
+@then("the response says what was freed")
+def response_says_freed(emptied: dict[str, Any]) -> None:
+    assert emptied["freed_bytes"] > 0
+    assert emptied["moved"]
+
+
+@then("the browser can undo it")
+def browser_can_undo(client: TestClient, machine: Machine) -> None:
+    response = client.post("/api/undo")
+    assert response.status_code == 200
+    assert response.json()["restored"]
+    assert machine.path("Sites/client-app/node_modules").exists()
+
+
+@then("it is refused with a warning")
+def refused_with_warning(reply: Any) -> None:
+    assert reply.status_code == 409, reply.text
+    assert "cannot be replaced" in reply.json()["detail"]
+
+
+@then("the response says it was overridden")
+def response_says_overridden(emptied: dict[str, Any]) -> None:
+    assert emptied["overridden"], "forcing a protected delete must be visible afterwards"
+
+
+@then(parsers.parse("it is told about a set of {count:d} identical files"))
+def told_about_a_set(duplicates: dict[str, Any], count: int) -> None:
+    sets = duplicates["sets"]
+    assert sets, "no duplicate sets were reported"
+    assert any(1 + len(entry["copies"]) == count for entry in sets)
+
+
+@then("it is told how much deleting the copies would free")
+def told_how_much(duplicates: dict[str, Any]) -> None:
+    assert duplicates["reclaimable_bytes"] > 0
+
+
+@then("it gets back a plan for what was dropped")
+def gets_a_plan_for_dropped(dropped: dict[str, Any]) -> None:
+    labels = [item["label"] for item in dropped["plan"]["proposals"]]
+    assert "node_modules" in labels, labels
+    assert dropped["chart"]["name"] == "dropped-project"
+
+
+@then("nothing on the server's disk was read")
+def nothing_on_server_read(dropped: dict[str, Any]) -> None:
+    # Every path in the answer is under the dropped folder's own name, so none of
+    # it came from a real filesystem the server walked.
+    def paths(node: dict[str, Any]) -> list[str]:
+        found = [node["path"]]
+        for child in node["children"]:
+            found.extend(paths(child))
+        return found
+
+    for path in paths(dropped["chart"]):
+        assert not Path(path).is_absolute(), f"{path} looks like a real filesystem path"
+
+
+@then(parsers.parse('"{relpath}" is gone from where it was'))
+def endpoint_gone(machine: Machine, relpath: str) -> None:
+    assert not machine.path(relpath).exists()
+
+
+@then(parsers.parse('"{relpath}" is back where it was'))
+def endpoint_back(machine: Machine, relpath: str) -> None:
+    assert machine.path(relpath).exists()

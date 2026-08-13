@@ -3,8 +3,11 @@
 	import Sunburst, { type ChartNode } from '$lib/components/Sunburst.svelte';
 	import PlanList from '$lib/components/PlanList.svelte';
 	import Answer from '$lib/components/Answer.svelte';
+	import Basket from '$lib/components/Basket.svelte';
+	import DropZone from '$lib/components/DropZone.svelte';
+	import Duplicates from '$lib/components/Duplicates.svelte';
 	import { size, VERDICT } from '$lib/format';
-	import type { Plan, AskResult } from '$lib/types';
+	import type { Plan, AskResult, BasketState, DuplicateReport } from '$lib/types';
 
 	let root = $state('~/Downloads');
 	let judge = $state(true);
@@ -88,6 +91,68 @@
 		}
 	}
 
+	let basket = $state<BasketState>({ items: [], total_bytes: 0 });
+	let duplicates = $state<DuplicateReport | null>(null);
+	let notice = $state('');
+
+	async function addToBasket(path: string, override = false) {
+		notice = '';
+		const res = await fetch('/api/basket', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ root: surveyedRoot, path, override })
+		});
+		const body = await res.json();
+		if (res.status === 409) {
+			// Not forbidden — not yet insisted upon. Ask, then let them through.
+			if (confirm(`${body.detail}\n\nAdd it anyway? It still goes to quarantine, not the bin.`)) {
+				return addToBasket(path, true);
+			}
+			return;
+		}
+		if (!res.ok) throw new Error(body.detail ?? 'That did not work.');
+		basket = body;
+	}
+
+	async function emptyBasket() {
+		const res = await fetch(`/api/basket/empty?root=${encodeURIComponent(surveyedRoot ?? '')}`, {
+			method: 'POST'
+		});
+		const body = await res.json();
+		notice = `Moved ${size(body.freed_bytes)} to quarantine. Nothing was deleted.`;
+		basket = { items: [], total_bytes: 0 };
+	}
+
+	async function clearBasket() {
+		const res = await fetch('/api/basket', { method: 'DELETE' });
+		basket = await res.json();
+	}
+
+	async function undo() {
+		const res = await fetch('/api/undo', { method: 'POST' });
+		const body = await res.json();
+		notice = `Put ${body.restored.length} back where they were.`;
+	}
+
+	async function loadDuplicates() {
+		const res = await fetch(`/api/duplicates?root=${encodeURIComponent(surveyedRoot ?? '')}`);
+		if (res.ok) duplicates = await res.json();
+	}
+
+	async function analyseDropped(payload: { name: string; files: unknown[] }) {
+		const res = await fetch('/api/dropped', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload)
+		});
+		if (!res.ok) throw new Error('That folder could not be analysed.');
+		const body = await res.json();
+		chart = body.chart;
+		plan = body.plan;
+		surveyedRoot = null;
+		status = `${payload.files.length.toLocaleString()} files read in your browser`;
+	}
+
 	const keptBack = $derived(
 		plan ? plan.protected.reduce((total, item) => total + item.size_bytes, 0) : 0
 	);
@@ -150,6 +215,9 @@
 	</section>
 
 	<section aria-label="Plan" class="min-w-0">
+		{#if !plan}
+			<DropZone onDropped={analyseDropped} />
+		{/if}
 		{#if surveyedRoot}
 			<form class="mb-3 flex flex-wrap gap-2" onsubmit={ask}>
 				<label class="sr-only" for="prompt">What to remove</label>
@@ -193,6 +261,28 @@
 			<Answer result={answer} />
 		{/if}
 
+		{#if notice}
+			<p
+				class="mb-5 rounded-md border px-4 py-3 text-sm"
+				style="border-color: var(--edge); color: var(--text)"
+				role="status"
+			>
+				{notice}
+				<button type="button" onclick={undo} class="ml-2 underline" style="color: var(--regenerable)">
+					Undo
+				</button>
+			</p>
+		{/if}
+
+		{#if basket.items.length}
+			<Basket
+				items={basket.items}
+				total={basket.total_bytes}
+				onEmpty={emptyBasket}
+				onClear={clearBasket}
+			/>
+		{/if}
+
 		<dl class="flex flex-wrap gap-x-8 gap-y-3 border-b pb-4" style="border-color: var(--edge)">
 			{#each [['safe to reclaim', plan?.reclaimable_bytes, 'var(--regenerable)'], ['needs you', plan?.needs_review_bytes, 'var(--review)'], ['kept back', plan ? keptBack : undefined, 'var(--irreplaceable)']] as [label, value, token] (label)}
 				<div>
@@ -204,7 +294,21 @@
 			{/each}
 		</dl>
 
-		<PlanList title="Proposed" items={plan?.proposals ?? []} empty={plan ? 'Nothing here can be safely reclaimed.' : "Run a survey to see what's here."} />
-		<PlanList title="Kept back" items={plan?.protected ?? []} empty={plan ? 'Nothing here needed protecting.' : ''} />
+		<PlanList title="Proposed" onBasket={addToBasket} items={plan?.proposals ?? []} empty={plan ? 'Nothing here can be safely reclaimed.' : "Run a survey to see what's here."} />
+		<PlanList title="Kept back" onBasket={addToBasket} items={plan?.protected ?? []} empty={plan ? 'Nothing here needed protecting.' : ''} />
+		{#if surveyedRoot}
+			{#if duplicates}
+				<Duplicates report={duplicates} onBasket={(path) => addToBasket(path)} />
+			{:else}
+				<button
+					type="button"
+					onclick={loadDuplicates}
+					class="mt-7 rounded-md border px-3 py-2 text-[13px]"
+					style="border-color: var(--edge); color: var(--text)"
+				>
+					Look for the same file twice
+				</button>
+			{/if}
+		{/if}
 	</section>
 </main>

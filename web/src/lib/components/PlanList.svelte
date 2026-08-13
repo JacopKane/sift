@@ -2,7 +2,17 @@
 	import { size, glyphFor, tokenFor, describe } from '$lib/format';
 	import type { PlanItem } from '$lib/types';
 
-	let { title, items, empty }: { title: string; items: PlanItem[]; empty: string } = $props();
+	let {
+		title,
+		items,
+		empty,
+		onBasket
+	}: {
+		title: string;
+		items: PlanItem[];
+		empty: string;
+		onBasket?: (path: string) => void;
+	} = $props();
 </script>
 
 <h2 class="mt-7 mb-2.5 text-[11px] font-semibold tracking-[0.14em] uppercase" style="color: var(--muted)">
@@ -37,9 +47,21 @@
 					<p class="mt-1 text-[12.5px]" style="color: var(--muted)">{item.reason}</p>
 				{/if}
 
-				<p class="mt-1 font-mono text-[12.5px]" style="color: {tokenFor(item.verdict)}">
-					{item.restore}{item.restore_time ? ` · ${item.restore_time}` : ''}
-				</p>
+				<div class="mt-1 flex flex-wrap items-baseline justify-between gap-2">
+					<p class="min-w-0 flex-1 font-mono text-[12.5px]" style="color: {tokenFor(item.verdict)}">
+						{item.restore}{item.restore_time ? ` · ${item.restore_time}` : ''}
+					</p>
+					{#if onBasket}
+						<button
+							type="button"
+							onclick={() => onBasket?.(item.paths[0])}
+							class="rounded border px-2 py-0.5 text-xs whitespace-nowrap"
+							style="border-color: var(--edge); color: var(--text)"
+						>
+							Add to basket
+						</button>
+					{/if}
+				</div>
 			</li>
 		{/each}
 	</ul>

@@ -19,9 +19,13 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from sift.ask import ask
+from sift.basket import Basket, item_for
+from sift.catalog import load_catalog
 from sift.classify import classify
+from sift.duplicates import find_duplicates
 from sift.models import Classification, Plan, ScanNode
 from sift.plan import build_plan
+from sift.quarantine import Protected, Quarantine
 from sift.scanner import boot_volume_exclusions
 from sift.survey import candidates_for_model, survey
 
@@ -46,12 +50,36 @@ class Question(BaseModel):
     prompt: str
 
 
-def create_app(home: Path | None = None) -> FastAPI:
+class Basketed(BaseModel):
+    root: str
+    path: str
+    override: bool = False
+
+
+class Dropped(BaseModel):
+    """A folder the browser walked itself.
+
+    Names and sizes only — the bytes never leave the machine, and the server never
+    touches its own disk to answer.
+    """
+
+    name: str
+    files: list[DroppedFile]
+
+
+class DroppedFile(BaseModel):
+    path: str
+    size_bytes: int
+
+
+def create_app(home: Path | None = None, quarantine: Path | None = None) -> FastAPI:
     app = FastAPI(title="Sift")
+    held = Quarantine(quarantine or Path.home() / ".sift" / "quarantine")
 
     # The last survey per root, so a question can be answered without walking the
     # disk again. A local single-user tool; nothing here needs a session store.
     surveyed: dict[str, ScanNode] = {}
+    basket = Basket()
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
@@ -94,7 +122,145 @@ def create_app(home: Path | None = None) -> FastAPI:
             "total_bytes": sum(cast(int, item["size_bytes"]) for item in chosen),
         }
 
+    @app.post("/api/basket")
+    async def basket_add(request: Basketed) -> dict[str, Any]:
+        tree = _surveyed_or_409(surveyed, request.root)
+        try:
+            basket.add(item_for(tree, Path(request.path), overridden=request.override))
+        except Protected as warning:
+            # 409 rather than 403: not forbidden, just not yet insisted upon.
+            raise HTTPException(409, str(warning)) from warning
+        return _basket_state(basket)
+
+    @app.delete("/api/basket")
+    async def basket_clear() -> dict[str, Any]:
+        basket.clear()
+        return _basket_state(basket)
+
+    @app.post("/api/basket/empty")
+    async def basket_empty(root: str) -> dict[str, Any]:
+        _surveyed_or_409(surveyed, root)
+        receipt = basket.empty_into(held)
+        return {
+            "freed_bytes": receipt.freed_bytes,
+            "moved": [str(entry.original) for entry in receipt.moved],
+            "overridden": [str(e.original) for e in receipt.moved if e.overridden],
+            "refused": receipt.refused,
+        }
+
+    @app.post("/api/undo")
+    async def undo() -> dict[str, Any]:
+        receipt = held.undo()
+        return {"restored": [str(entry.original) for entry in receipt.moved]}
+
+    @app.get("/api/duplicates")
+    async def duplicates(root: str) -> dict[str, Any]:
+        tree = _surveyed_or_409(surveyed, root)
+        report = find_duplicates(tree)
+        return {
+            "reclaimable_bytes": report.reclaimable_bytes,
+            "files_read": report.files_read,
+            "sets": [
+                {
+                    "keep": str(found.keep),
+                    "copies": [str(copy) for copy in found.copies],
+                    "size_bytes": found.size_bytes,
+                    "reclaimable_bytes": found.reclaimable_bytes,
+                }
+                for found in report.duplicates
+            ],
+        }
+
+    @app.post("/api/dropped")
+    async def dropped(folder: Dropped) -> dict[str, Any]:
+        """Plan a folder the browser walked itself, without touching this disk."""
+        tree = _tree_from(folder)
+        _name_what_we_can(tree)
+        plan = build_plan(tree)
+        return {
+            "plan": plan.model_dump(mode="json"),
+            "chart": _chart(tree, tree.size_bytes),
+        }
+
     return app
+
+
+def _basket_state(basket: Basket) -> dict[str, Any]:
+    return {
+        "items": [
+            {
+                "path": str(item.path),
+                "size_bytes": item.size_bytes,
+                "verdict": item.verdict.value if item.verdict else None,
+                "overridden": item.overridden,
+            }
+            for item in basket.items
+        ],
+        "total_bytes": basket.total_bytes,
+    }
+
+
+def _surveyed_or_409(surveyed: dict[str, ScanNode], root: str) -> ScanNode:
+    tree = surveyed.get(str(Path(root).expanduser()))
+    if tree is None:
+        raise HTTPException(409, "Survey that folder first.")
+    return tree
+
+
+def _name_what_we_can(tree: ScanNode) -> None:
+    """Apply the catalog to a tree with no filesystem behind it.
+
+    The rules work on names, so they work here — but `requires_sibling` normally
+    asks the disk, and a dropped folder is not on this disk. The neighbours come
+    from the tree instead.
+    """
+    catalog = load_catalog(Path("/"))
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        siblings = {child.name for child in node.children}
+        for child in node.children:
+            rule = catalog.recognise(
+                child.path, is_dir=child.is_dir, siblings=siblings - {child.name}
+            )
+            if rule is not None:
+                child.rule_id, child.label = rule.id, rule.label
+                child.verdict, child.restore = rule.verdict, rule.restore
+                child.restore_time = rule.restore_time
+            stack.append(child)
+
+
+def _tree_from(folder: Dropped) -> ScanNode:
+    """Rebuild a tree from what the browser reported, with no filesystem access."""
+    root = ScanNode(
+        path=Path(folder.name), name=folder.name, is_dir=True, size_bytes=0, allocated_bytes=0
+    )
+    directories: dict[Path, ScanNode] = {root.path: root}
+
+    def directory(path: Path) -> ScanNode:
+        if path not in directories:
+            parent = directory(path.parent)
+            node = ScanNode(path=path, name=path.name, is_dir=True, size_bytes=0, allocated_bytes=0)
+            parent.children.append(node)
+            directories[path] = node
+        return directories[path]
+
+    for entry in folder.files:
+        path = Path(folder.name) / entry.path
+        node = ScanNode(
+            path=path,
+            name=path.name,
+            is_dir=False,
+            size_bytes=entry.size_bytes,
+            allocated_bytes=entry.size_bytes,
+        )
+        directory(path.parent).children.append(node)
+        for ancestor in [path.parent, *path.parent.parents]:
+            if ancestor in directories:
+                directories[ancestor].size_bytes += entry.size_bytes
+                directories[ancestor].allocated_bytes += entry.size_bytes
+
+    return root
 
 
 def _sizes(tree: ScanNode) -> dict[Path, int]:

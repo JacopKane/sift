@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -246,3 +248,13 @@ def reports_freeing(receipt: Receipt, sizes_before: dict[str, int], relpath: str
     assert receipt.freed_bytes == expected, (
         f"reported freeing {receipt.freed_bytes} but the directory held {expected}"
     )
+
+
+@given(parsers.parse('a file "{relpath}" holding "{contents}"'))
+def a_file_holding(machine: Machine, relpath: str, contents: str) -> None:
+    target = machine.path(relpath)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Padded past the minimum, so the scenario is about contents rather than about
+    # the size floor. Written with distinct mtimes so "keep the oldest" is testable.
+    target.write_bytes(contents.encode().ljust(8192, b"\0"))
+    os.utime(target, (time.time() - len(relpath) * 100,) * 2)

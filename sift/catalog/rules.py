@@ -33,21 +33,30 @@ class Catalog:
         self._rules = tuple(rules)
         self._home = home
 
-    def recognise(self, path: Path, *, is_dir: bool) -> CatalogRule | None:
-        """The first rule that claims *path*, or None if the catalog can't name it."""
+    def recognise(
+        self, path: Path, *, is_dir: bool, siblings: set[str] | None = None
+    ) -> CatalogRule | None:
+        """The first rule that claims *path*, or None if the catalog can't name it.
+
+        *siblings* lets a caller supply the neighbouring names itself, for trees
+        that have no filesystem behind them — a folder dropped into the browser is
+        reported as names and sizes and never exists on this machine.
+        """
         if not is_dir:
             # Directories are classified, not files. Asking about 47,000 files is
             # impossible; asking about the 50 directories holding them is not.
             return None
-        return next((rule for rule in self._rules if self._matches(rule, path)), None)
+        return next((rule for rule in self._rules if self._matches(rule, path, siblings)), None)
 
-    def _matches(self, rule: CatalogRule, path: Path) -> bool:
+    def _matches(self, rule: CatalogRule, path: Path, siblings: set[str] | None = None) -> bool:
         if not self._path_matches(rule.match, path):
             return False
         if rule.requires_sibling is None:
             return True
         # Generic names only count when their marker is beside them: `target` is
         # build output next to a Cargo.toml, and somebody's folder without one.
+        if siblings is not None:
+            return rule.requires_sibling in siblings
         return (path.parent / rule.requires_sibling).exists()
 
     def _path_matches(self, pattern: str, path: Path) -> bool:

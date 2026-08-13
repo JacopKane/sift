@@ -26,3 +26,28 @@ export type AskResult = {
 	refused: string[];
 	total_bytes: number;
 };
+
+export type BasketItem = {
+	path: string;
+	size_bytes: number;
+	verdict: Verdict;
+	overridden: boolean;
+};
+
+export type BasketState = {
+	items: BasketItem[];
+	total_bytes: number;
+};
+
+export type DuplicateSet = {
+	keep: string;
+	copies: string[];
+	size_bytes: number;
+	reclaimable_bytes: number;
+};
+
+export type DuplicateReport = {
+	reclaimable_bytes: number;
+	files_read: number;
+	sets: DuplicateSet[];
+};

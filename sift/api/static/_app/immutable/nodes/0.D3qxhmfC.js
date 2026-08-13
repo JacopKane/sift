@@ -1,0 +1,1 @@
+import{D as e,H as t,T as n,V as r,b as i}from"../chunks/nlMoXtdU.js";import"../chunks/xihTtKlq.js";var a=e(`<a href="#main" class="sr-only-focusable rounded-md px-3 py-2" style="background: var(--surface); color: var(--text); border: 1px solid var(--edge)">Skip to content</a> <!>`,1);function o(e,o){var s=a(),c=t(r(s),2);i(c,()=>o.children),n(e,s)}export{o as component};
