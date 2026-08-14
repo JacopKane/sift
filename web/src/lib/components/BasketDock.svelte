@@ -114,7 +114,8 @@
 	{#if unrecoverable}
 		<p class="px-3.5 pb-2 text-[12px]" style="color: var(--irreplaceable)">
 			<span aria-hidden="true">✕</span>
-			{unrecoverable} of these cannot be replaced. Quarantine holds them until you empty it.
+			{unrecoverable} of these cannot be replaced. They go to the Trash, and stay there until you
+			empty it.
 		</p>
 	{/if}
 
@@ -130,7 +131,7 @@
 				Cancel — {counting}s
 			</button>
 			<span class="sr-only" role="status" aria-live="assertive">
-				Moving {size(total)} to quarantine in {counting} seconds.
+				Moving {size(total)} to the Trash in {counting} seconds.
 			</span>
 		{:else}
 			<button

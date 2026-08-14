@@ -12,11 +12,16 @@ uvx --from git+https://github.com/JacopKane/sift sift
 
 That's it. A window opens asking which folder — drop one in, or pick Downloads, Desktop or the whole disk. No config screen.
 
-Want the model to judge what the rules can't name? Add a key:
+**You need one API key.** Rules settle most of a disk on their own; the model
+names the rest, and the test suite calls it for real rather than replaying a
+recording.
 
 ```bash
-cp .env.example .env      # then paste one key: Gemini, OpenAI, or Claude
+cp .env.example .env      # paste one key: Gemini, OpenAI, or Claude
 ```
+
+Gemini's free tier is enough to try it — set `SIFT_REQUESTS_PER_MINUTE=12` with one.
+Without a key, Sift still runs on the rules alone and 70 of the 92 test scenarios pass.
 
 Skip the question by naming a folder: `sift ~/Projects` · Whole disk: `sift /`
 
@@ -28,7 +33,7 @@ Skip the question by naming a folder: `sift ~/Projects` · Whole disk: `sift /`
 - **Says what's safe.** Every item gets a verdict: rebuilds itself, needs a decision, or can't be replaced.
 - **Tells you how to get it back.** `npm install`. `cargo build`. Or plainly: cannot be restored.
 - **Takes plain requests.** *"Delete the app installers I already installed"* → the two `.dmg` files, nothing else.
-- **Never deletes.** Reclaiming moves things to quarantine. `undo` puts them back.
+- **Never deletes.** Reclaiming moves things to your Trash. `undo` puts them back.
 
 ---
 
@@ -55,8 +60,9 @@ Colour is never the only signal — each verdict has its own glyph and its own w
 ## Safety
 
 - **Nothing is locked.** There is no protected list and nothing you can be refused. It's your disk.
-- **Nothing is deleted either.** Reclaiming *moves* to quarantine with a manifest. Emptying it is your separate, deliberate act, behind a countdown you can cancel.
+- **Nothing is deleted either.** Reclaiming *moves* to the Trash your desktop already has, behind a countdown you can cancel. Emptying it is yours, in the app you already trust for it.
 - **You always know what you picked.** The verdict travels with a file — into the basket, onto the receipt, into the manifest. The basket says how many of its contents can't be replaced before you empty it.
+- **Undo is ours, not the Finder's.** A manifest beside the Trash puts a whole basket back at once. Empty the Trash first and undo says which ones it couldn't reach rather than claiming success.
 - **It proposes, you choose.** Sift never *proposes* deleting something irreplaceable; it puts it under "can't be replaced" and leaves it there. Taking it is one click, same as anything else.
 - **Your files stay put.** Names, sizes and extensions go to the model. File contents never leave your machine.
 
@@ -90,8 +96,8 @@ uv sync && uv run sift
 ```
 
 ```bash
-.venv/bin/pytest -m "not slow"   # 70 scenarios, ~4s, no network
-.venv/bin/pytest -m slow         # calls the real model
+.venv/bin/pytest -m "not slow"   # 70 scenarios, ~4s, no key needed
+.venv/bin/pytest -m slow         # 22 more, real model, needs the key from .env
 ```
 
 Test-first in Gherkin, nothing mocked — not the filesystem, not the model. See [CLAUDE.md](CLAUDE.md).

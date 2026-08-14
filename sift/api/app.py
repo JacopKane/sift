@@ -73,7 +73,7 @@ class DroppedFile(BaseModel):
 
 def create_app(home: Path | None = None, quarantine: Path | None = None) -> FastAPI:
     app = FastAPI(title="Sift")
-    held = Quarantine(quarantine or Path.home() / ".sift" / "quarantine")
+    held = Quarantine(quarantine) if quarantine else Quarantine.native()
 
     # The last survey per root, so a question can be answered without walking the
     # disk again. A local single-user tool; nothing here needs a session store.

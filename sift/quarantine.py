@@ -1,8 +1,9 @@
 """Reclaiming space, reversibly.
 
-Nothing here deletes. Reclaiming *moves* a path into a quarantine directory and
-records where it came from; :func:`undo` reads that record and puts it back.
-Emptying quarantine is a separate act the person performs.
+Nothing here deletes. Reclaiming *moves* a path into the bin this machine already
+has and records where it came from; :func:`undo` reads that record and puts it
+back. Emptying the bin is a separate act the person performs — and because it is
+their own Trash, they already know how, and already trust it.
 
 The reason is the verdicts. A plan built partly from a model's judgement will
 sometimes be wrong — two frontier models disagreed about whether a source
@@ -13,6 +14,7 @@ can be taken back.
 from __future__ import annotations
 
 import json
+import platform
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +24,28 @@ from pydantic import BaseModel, Field
 from sift.models import Verdict
 
 MANIFEST = "manifest.json"
+
+OURS = Path.home() / ".sift"
+"""Where the record lives when the bin is not ours to put files in."""
+
+
+def native_bin() -> Path:
+    """Where this machine already puts things on their way out.
+
+    Using the desktop's own bin is what makes "we never delete, you do" true
+    rather than a promise: the files land somewhere the person already knows how
+    to inspect, restore from and empty, with no second bin to learn.
+
+    Only macOS is native so far. The freedesktop spec needs a `.trashinfo`
+    sidecar written per file for a Linux desktop to offer "restore", and there is
+    no Linux catalog yet for anything to reach it with — a half-native bin, where
+    files appear but cannot be put back, is worse than an honest one of our own.
+    """
+    # platform.system() rather than sys.platform: the type checker narrows the
+    # latter to whatever it is running on and declares the other branch dead.
+    if platform.system() == "Darwin":
+        return Path.home() / ".Trash"
+    return OURS / "quarantine"
 
 
 class Reclaimed(BaseModel):
@@ -47,14 +71,20 @@ class Receipt(BaseModel):
 
 
 class Quarantine:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, record: Path | None = None) -> None:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
+        # Kept out of the bin when the bin is the person's own: a manifest.json
+        # sitting in their Trash is our clutter in their space, and it would be
+        # emptied along with everything else exactly when undo still needs it.
+        self.manifest_path = record or root / MANIFEST
+        self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
         self._entries: list[Reclaimed] | None = None
 
-    @property
-    def manifest_path(self) -> Path:
-        return self.root / MANIFEST
+    @classmethod
+    def native(cls) -> Quarantine:
+        """The bin this machine already has, with our record kept beside it."""
+        return cls(native_bin(), record=OURS / MANIFEST)
 
     def held(self) -> list[Reclaimed]:
         if not self.manifest_path.exists():
@@ -114,10 +144,17 @@ class Quarantine:
         return self._entries
 
     def undo(self) -> Receipt:
-        """Put everything back where it came from, newest first."""
+        """Put everything back where it came from, newest first.
+
+        The bin belongs to the person, so it can be emptied from under us between
+        reclaiming and undoing. Anything whose bytes are gone is reported rather
+        than skipped: a receipt that lists nothing reads as "all restored".
+        """
         restored: list[Reclaimed] = []
+        gone: list[str] = []
         for entry in reversed(self.held()):
             if not entry.held_at.exists():
+                gone.append(f"{entry.original}: emptied from the bin before undo")
                 continue
             entry.original.parent.mkdir(parents=True, exist_ok=True)
             if entry.original.exists() and not any(entry.original.iterdir()):
@@ -127,7 +164,7 @@ class Quarantine:
 
         self._record([])
         self._entries = []
-        return Receipt(moved=restored, freed_bytes=0)
+        return Receipt(moved=restored, freed_bytes=0, refused=gone)
 
     def _free_slot(self, path: Path) -> Path:
         """Somewhere in quarantine nothing already occupies.

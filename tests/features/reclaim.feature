@@ -42,6 +42,17 @@ Feature: Reclaiming space, reversibly
     When I undo
     Then ".ssh" is back where it was
 
+  Scenario: Reclaiming uses the bin this machine already has
+    When sift picks where reclaimed things go
+    Then it is a bin the desktop already empties, not one we invented
+
+  Scenario: Emptying that bin outside sift does not break undo
+    When I reclaim "Sites/client-app/node_modules"
+    And the bin is emptied by something other than sift
+    And I undo
+    Then it says what it could not bring back
+    And "Sites/client-app/node_modules" is gone from where it was
+
   Scenario: Two reclaims are both remembered
     When I reclaim "Sites/client-app/node_modules"
     And I reclaim "Library/Caches"

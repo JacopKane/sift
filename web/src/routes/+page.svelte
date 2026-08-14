@@ -156,7 +156,7 @@
 			method: 'POST'
 		});
 		const body = await res.json();
-		status = `moved ${size(body.freed_bytes)} to quarantine`;
+		status = `moved ${size(body.freed_bytes)} to the Trash`;
 		basket = { items: [], total_bytes: 0 };
 	}
 
