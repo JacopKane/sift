@@ -53,15 +53,18 @@
 </script>
 
 <!--
-	Always on screen, even when empty. A basket you only see once something is in
-	it is a basket nobody discovers — and it is also the drop target, which has to
-	be visible to be aimed at.
+	Always on screen, even when empty. A bin you only see once something is in it is
+	a bin nobody discovers — and it is the drop target, which has to be visible to
+	be aimed at.
+
+	Called Trash because that is where Empty sends it. Two names for one place is
+	how an interface teaches you a word you did not need.
 -->
 <aside
 	class="flex h-full flex-col rounded-lg border transition-colors"
 	style="border-color: {over ? 'var(--regenerable)' : 'var(--edge)'};
 	       background: {over ? 'color-mix(in oklab, var(--regenerable) 8%, var(--surface))' : 'var(--surface)'}"
-	aria-label="Basket"
+	aria-label="Trash"
 	ondragover={(e) => {
 		e.preventDefault();
 		over = true;
@@ -76,7 +79,7 @@
 >
 	<div class="flex items-center gap-2 border-b px-3.5 py-2.5" style="border-color: var(--edge)">
 		<ShoppingBasket size={15} aria-hidden="true" style="color: var(--muted)" />
-		<span class="label flex-1">Basket</span>
+		<span class="label flex-1">Trash</span>
 		<span class="tabular text-[13px]">{size(total)}</span>
 	</div>
 
@@ -85,7 +88,7 @@
 			<p class="px-1.5 py-6 text-center text-[12.5px]" style="color: var(--faint)">
 				Drag things here, or press
 				<span class="mx-0.5 inline-block rounded border px-1" style="border-color: var(--edge)">+</span>
-				on anything below.
+				on anything.
 			</p>
 		{:else}
 			<ul class="flex flex-col gap-0.5">

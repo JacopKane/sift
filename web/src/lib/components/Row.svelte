@@ -63,8 +63,8 @@
 				onclick={() => onBasket?.(item.paths[0])}
 				class="rounded p-1 transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
 				style="color: var(--muted)"
-				aria-label="Add {item.label} to basket"
-				title="Add to basket"
+				aria-label="Add {item.label} to the Trash"
+				title="Add to the Trash"
 			>
 				<Plus size={16} aria-hidden="true" />
 			</button>

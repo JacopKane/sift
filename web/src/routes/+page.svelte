@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import Search from '@lucide/svelte/icons/search';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -36,29 +35,42 @@
 
 	let basket = $state<BasketState>({ items: [], total_bytes: 0 });
 	let duplicates = $state<DuplicateReport | null>(null);
+	let hunting = $state(false);
 
 	const kept = $derived(plan ? plan.irreplaceable.reduce((t, i) => t + i.size_bytes, 0) : 0);
 	const safe = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'regenerable') : []);
 	const undecided = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'review') : []);
+
+	// Two groups: what Sift suggests, and the rest. A copy is a suggestion — it is
+	// the same bytes twice and one of them rebuilds from the other — so duplicates
+	// belong in the first group rather than in a fourth of their own. What needs a
+	// decision and what cannot be replaced are both "not suggested"; the colour on
+	// each row is what separates them, and it does that without a heading.
+	const suggested = $derived(
+		plan ? plan.reclaimable_bytes + (duplicates?.reclaimable_bytes ?? 0) : 0
+	);
+	const suggestedCount = $derived(safe.length + (duplicates?.sets.length ?? 0));
+	const rest = $derived(plan ? [...undecided, ...plan.irreplaceable] : []);
+	const restBytes = $derived(plan ? plan.needs_review_bytes + kept : 0);
 
 	const totals = $derived<Total[]>(
 		plan
 			? [
 					{
 						verdict: 'regenerable',
-						title: 'Safe to reclaim',
+						title: 'rebuilds itself',
 						count: safe.length,
 						bytes: plan.reclaimable_bytes
 					},
 					{
 						verdict: 'review',
-						title: 'Needs a decision',
+						title: 'needs a decision',
 						count: undecided.length,
 						bytes: plan.needs_review_bytes
 					},
 					{
 						verdict: 'irreplaceable',
-						title: 'Kept back',
+						title: "can't be replaced",
 						count: plan.irreplaceable.length,
 						bytes: kept
 					}
@@ -138,8 +150,8 @@
 		}
 	}
 
-	// Nothing is refused, so there is nothing to confirm here. The confirmation is
-	// the basket itself: what you picked is listed, coloured by what it costs, and
+	// Nothing is refused, so there is nothing to confirm here. The Trash panel is
+	// the confirmation: what you picked is listed, coloured by what it costs, and
 	// emptying is a separate press with a countdown you can cancel.
 	async function addToBasket(path: string): Promise<void> {
 		const res = await fetch('/api/basket', {
@@ -170,8 +182,15 @@
 	}
 
 	async function loadDuplicates() {
-		const res = await fetch(`/api/duplicates?root=${encodeURIComponent(surveyedRoot ?? '')}`);
-		if (res.ok) duplicates = await res.json();
+		// Every file that shares a size with another gets opened and read, so on a
+		// large folder this is minutes, not moments. Saying so beats a dead button.
+		hunting = true;
+		try {
+			const res = await fetch(`/api/duplicates?root=${encodeURIComponent(surveyedRoot ?? '')}`);
+			if (res.ok) duplicates = await res.json();
+		} finally {
+			hunting = false;
+		}
 	}
 
 	function restart() {
@@ -180,6 +199,7 @@
 		chart = null;
 		answer = null;
 		duplicates = null;
+		hunting = false;
 		surveyedRoot = null;
 		status = '';
 	}
@@ -264,39 +284,44 @@
 					</p>
 				{/if}
 
+				<!--
+					The groups are what Sift worked out on its own; this is where you say
+					what you actually want, and it is the reason the tool exists. Sized
+					accordingly rather than tucked above the list as a filter box.
+				-->
 				{#if surveyedRoot}
 					<form class="flex shrink-0 gap-2" onsubmit={ask}>
 						<label class="sr-only" for="prompt">What to get rid of</label>
 						<div class="relative flex-1">
 							<span
-								class="pointer-events-none absolute top-2.5 left-2.5"
-								style="color: var(--faint)"
+								class="pointer-events-none absolute top-3 left-3"
+								style="color: {asking ? 'var(--regenerable)' : 'var(--faint)'}"
 							>
-								<Sparkles size={15} aria-hidden="true" />
+								<Sparkles size={17} aria-hidden="true" />
 							</span>
 							<input
 								id="prompt"
 								bind:value={prompt}
-								placeholder="delete the screenshots…"
-								class="w-full rounded-lg border py-2 pr-3 pl-8 text-[13px] transition-colors"
+								disabled={asking}
+								placeholder="delete the screenshots on my desktop…"
+								class="w-full rounded-xl border py-2.5 pr-3 pl-10 text-[14px] transition-colors disabled:opacity-60"
 								style="background: var(--surface); border-color: var(--edge); color: var(--text)"
 							/>
 						</div>
 						<button
 							type="submit"
 							disabled={asking}
-							class="rounded-lg border p-2 transition-colors hover:bg-[var(--raised)] disabled:opacity-40"
-							style="border-color: var(--edge); color: var(--text)"
-							aria-label={asking ? 'Thinking' : 'Ask'}
+							class="rounded-xl px-4 text-[13px] font-semibold transition-[filter] enabled:hover:brightness-105 disabled:opacity-50"
+							style="background: var(--regenerable-solid); color: var(--on-solid)"
 						>
-							<Search size={16} aria-hidden="true" />
+							{asking ? 'Thinking…' : 'Ask'}
 						</button>
 					</form>
 				{/if}
 
 				{#if answer}
 					<Group
-						title="Answer"
+						title="What you asked for"
 						count={answer.selected.length}
 						bytes={answer.total_bytes}
 						token="var(--review-solid)"
@@ -314,7 +339,7 @@
 									onclick={() => addToBasket(file.path)}
 									class="rounded p-1 transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
 									style="color: var(--muted)"
-									aria-label="Add {file.name} to basket"
+									aria-label="Add {file.name} to the Trash"
 								>
 									<Plus size={15} aria-hidden="true" />
 								</button>
@@ -342,65 +367,47 @@
 
 				{#if plan}
 					<Group
-						title="Safe to reclaim"
-						count={safe.length}
-						bytes={plan.reclaimable_bytes}
+						title="Suggestions"
+						count={suggestedCount}
+						bytes={suggested}
 						token="var(--regenerable-solid)"
 					>
 						{#each safe as item (item.label + item.paths[0])}
 							<Row {item} onBasket={addToBasket} />
 						{/each}
+						{#each duplicates?.sets ?? [] as found (found.keep)}
+							<DuplicateStack {found} onBasket={addToBasket} />
+						{/each}
+
+						{#snippet footer()}
+							{#if surveyedRoot && !duplicates}
+								<button
+									type="button"
+									onclick={loadDuplicates}
+									disabled={hunting}
+									class="flex w-full items-center justify-center gap-2 text-[12px] transition-colors hover:text-[var(--text)] disabled:opacity-50"
+									style="color: var(--muted)"
+								>
+									<Copy size={13} aria-hidden="true" />
+									{hunting
+										? 'Reading the ones that share a size…'
+										: 'Also look for the same file twice'}
+								</button>
+							{/if}
+						{/snippet}
 					</Group>
 
 					<Group
-						title="Needs a decision"
-						count={undecided.length}
-						bytes={plan.needs_review_bytes}
-						token="var(--review-solid)"
+						title="Everything else"
+						count={rest.length}
+						bytes={restBytes}
+						token="var(--edge-strong)"
 						open={false}
 					>
-						{#each undecided as item (item.label + item.paths[0])}
+						{#each rest as item (item.label + item.paths[0])}
 							<Row {item} onBasket={addToBasket} />
 						{/each}
 					</Group>
-
-					<Group
-						title="Kept back"
-						count={plan.irreplaceable.length}
-						bytes={kept}
-						token="var(--irreplaceable-solid)"
-						open={false}
-					>
-						{#each plan.irreplaceable as item (item.label + item.paths[0])}
-							<Row {item} onBasket={addToBasket} />
-						{/each}
-					</Group>
-
-					{#if surveyedRoot}
-						{#if duplicates}
-							<Group
-								title="The same file twice"
-								count={duplicates.sets.length}
-								bytes={duplicates.reclaimable_bytes}
-								token="var(--review-solid)"
-								open={false}
-							>
-								{#each duplicates.sets as found (found.keep)}
-									<DuplicateStack {found} onBasket={addToBasket} />
-								{/each}
-							</Group>
-						{:else}
-							<button
-								type="button"
-								onclick={loadDuplicates}
-								class="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-[13px] transition-colors hover:bg-[var(--raised)] hover:text-[var(--text)]"
-								style="border-color: var(--edge); color: var(--muted)"
-							>
-								<Copy size={15} aria-hidden="true" />
-								Look for the same file twice
-							</button>
-						{/if}
-					{/if}
 				{/if}
 			</section>
 

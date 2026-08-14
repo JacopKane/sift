@@ -2,20 +2,60 @@
 
 from __future__ import annotations
 
-from pytest_bdd import parsers, scenarios, then, when
+import os
+import time
+from pathlib import Path
+
+import pytest
+from pytest_bdd import given, parsers, scenarios, then, when
 
 from sift.duplicates import Report, find_duplicates
-from sift.models import ScanNode
+from sift.models import ScanNode, Verdict
 from sift.survey import survey
 from tests.machine import Machine
 
 scenarios("duplicates.feature")
 
 
+@pytest.fixture
+def judged() -> str | None:
+    """Nothing has been judged, unless a scenario says so."""
+    return None
+
+
+@given(parsers.parse('"{relpath}" has been judged to rebuild itself'), target_fixture="judged")
+def judged_regenerable(relpath: str) -> str:
+    return relpath
+
+
+@given(parsers.parse('"{relpath}" is the older of the two'))
+def is_the_older(machine: Machine, relpath: str) -> None:
+    # Which one is kept turns on mtime, so leaving them the same age makes the
+    # scenario pass or fail on the order the filesystem happened to report.
+    yesterday = time.time() - 86_400
+    os.utime(machine.path(relpath), (yesterday, yesterday))
+
+
 @when("I look for duplicates", target_fixture="report")
-def i_look_for_duplicates(machine: Machine) -> Report:
+def i_look_for_duplicates(machine: Machine, judged: str | None) -> Report:
     tree = list(survey(machine.root, home=machine.root))[-1]
+    # What the classifier writes back once the model has answered. A cache the
+    # catalog names is pruned during the walk and never reaches here; a folder the
+    # model judged is fully in the tree, which is where the overlap lives.
+    if judged:
+        _mark(tree, machine.path(judged), Verdict.REGENERABLE)
     return find_duplicates(tree)
+
+
+def _mark(tree: ScanNode, path: Path, verdict: Verdict) -> None:
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        if node.path == path:
+            node.verdict = verdict
+            return
+        stack.extend(node.children)
+    raise KeyError(f"{path} was not in the survey")
 
 
 def _pair(report: Report, machine: Machine, one: str, two: str) -> bool:
@@ -79,3 +119,13 @@ def _all(tree: ScanNode) -> list[ScanNode]:
         found.append(node)
         stack.extend(node.children)
     return found
+
+
+@then(parsers.parse('nothing inside "{relpath}" is offered as a copy'))
+def nothing_inside_is_offered(report: Report, machine: Machine, relpath: str) -> None:
+    inside = machine.path(relpath)
+    offered = [copy for found in report.duplicates for copy in found.copies]
+    assert not [c for c in offered if inside in c.parents], (
+        f"a copy inside {relpath} was offered again, and {relpath} is already going "
+        "whole — approving both promises the same bytes twice"
+    )

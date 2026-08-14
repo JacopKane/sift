@@ -43,6 +43,15 @@ Feature: Finding the same thing twice
     When I look for duplicates
     Then "Downloads/report.pdf" and "Documents/report-final.pdf" are the same file
 
+  Scenario: A copy inside a folder already going is not a second decision
+    Given a file "Documents/report.pdf" holding "quarterly numbers"
+    And a file "Downloads/old-build/report.pdf" holding "quarterly numbers"
+    And "Documents/report.pdf" is the older of the two
+    And "Downloads/old-build" has been judged to rebuild itself
+    When I look for duplicates
+    Then nothing inside "Downloads/old-build" is offered as a copy
+    And "Documents/report.pdf" is not a duplicate of either
+
   Scenario: A version chain is reported as one decision
     Given a file "Downloads/NDA_v1.docx" holding "first draft"
     And a file "Downloads/NDA_v2.docx" holding "second draft"

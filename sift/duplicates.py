@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from sift.models import ScanNode
+from sift.models import ScanNode, Verdict
 
 CHUNK = 1024 * 1024
 MIN_BYTES = 4096
@@ -50,8 +50,14 @@ class Report(BaseModel):
 
 
 def find_duplicates(tree: ScanNode, minimum: int = MIN_BYTES) -> Report:
-    """Identical files under *tree*, largest sets first."""
-    files = [node for node in _walk(tree) if not node.is_dir and node.size_bytes >= minimum]
+    """Identical files under *tree*, largest sets first.
+
+    Files inside something already judged regenerable are left out. That folder is
+    going whole, so a copy within it is not a second decision — offering it again
+    promises the same bytes twice, and the two numbers then add up to more than
+    the disk would give back.
+    """
+    files = [node for node in _loose(tree) if not node.is_dir and node.size_bytes >= minimum]
 
     by_size: dict[int, list[ScanNode]] = defaultdict(list)
     for node in files:
@@ -107,10 +113,19 @@ def _digest(path: Path) -> str | None:
     return digest.hexdigest()
 
 
-def _walk(tree: ScanNode) -> list[ScanNode]:
-    found, stack = [], [tree]
+def _loose(tree: ScanNode) -> list[ScanNode]:
+    """Every node not already covered by a regenerable ancestor.
+
+    The catalog's own caches never reach here — the survey prunes them during the
+    walk — but a folder the model judged is fully in the tree, and that is where
+    the overlap lives.
+    """
+    found: list[ScanNode] = []
+    stack = [tree]
     while stack:
         node = stack.pop()
+        if node is not tree and node.verdict is Verdict.REGENERABLE:
+            continue
         found.append(node)
         stack.extend(node.children)
     return found

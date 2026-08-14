@@ -67,8 +67,8 @@
 			onclick={() => found.copies.forEach(onBasket)}
 			class="rounded p-1 transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
 			style="color: var(--muted)"
-			aria-label="Add {copies} {copies === 1 ? 'copy' : 'copies'} to basket, keeping the original"
-			title="Basket the copies, keep the original"
+			aria-label="Add {copies} {copies === 1 ? 'copy' : 'copies'} to the Trash, keeping the original"
+			title="Trash the copies, keep the original"
 		>
 			<Plus size={16} aria-hidden="true" />
 		</button>

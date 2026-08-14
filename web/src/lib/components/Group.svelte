@@ -9,7 +9,8 @@
 		token,
 		open = $bindable(true),
 		list = true,
-		children
+		children,
+		footer
 	}: {
 		title: string;
 		count: number;
@@ -18,6 +19,7 @@
 		open?: boolean;
 		list?: boolean;
 		children: import('svelte').Snippet;
+		footer?: import('svelte').Snippet;
 	} = $props();
 
 	/** About seven rows. Enough to judge a group by, short enough to see the next. */
@@ -90,11 +92,19 @@
 			<button
 				type="button"
 				onclick={() => (all = !all)}
-				class="w-full rounded-b-[9px] border-t px-3.5 py-1.5 text-[12px] transition-colors hover:bg-[var(--raised)]"
+				class="w-full border-t px-3.5 py-1.5 text-[12px] transition-colors hover:bg-[var(--raised)]"
 				style="border-color: var(--edge); color: var(--muted)"
 			>
 				{all ? 'Show less' : `Show all ${count}`}
 			</button>
+		{/if}
+
+		<!-- Outside the clip on purpose: an action buried under the fade is an
+		     action nobody finds. -->
+		{#if footer}
+			<div class="border-t px-3.5 py-2" style="border-color: var(--edge)">
+				{@render footer()}
+			</div>
 		{/if}
 	{/if}
 </section>
