@@ -6,12 +6,16 @@ pointed somewhere disposable. Nothing here calls a model.
 
 from __future__ import annotations
 
+import os
+import time
+from collections.abc import Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from pytest_bdd import parsers, scenarios, then, when
+from pytest_bdd import given, parsers, scenarios, then, when
 
 from sift.api import create_app
 from tests.machine import Machine
@@ -20,13 +24,18 @@ scenarios("endpoints.feature")
 
 
 @pytest.fixture
-def client(machine: Machine) -> TestClient:
-    return TestClient(
+def client(machine: Machine) -> Iterator[TestClient]:
+    # Entered as a context manager so every request in a scenario shares one
+    # event loop, exactly as they would in the running app. A TestClient used
+    # without this gives each request a loop of its own, which would hide the
+    # very thing the responsiveness scenario is looking for.
+    with TestClient(
         create_app(
             home=machine.root,
             quarantine=machine.root.parent / f"quarantine-{machine.root.name}",
         )
-    )
+    ) as client:
+        yield client
 
 
 @when("the browser surveys the machine")
@@ -147,3 +156,50 @@ def endpoint_gone(machine: Machine, relpath: str) -> None:
 @then(parsers.parse('"{relpath}" is back where it was'))
 def endpoint_back(machine: Machine, relpath: str) -> None:
     assert machine.path(relpath).exists()
+
+
+@given(parsers.parse("{count:d} large files, half of them copies of the other half"))
+def large_duplicate_files(machine: Machine, count: int) -> None:
+    """Enough bytes that hashing them takes long enough to notice.
+
+    Real files with real random contents — the point is the time the hashing
+    actually costs, which a stub could not spend.
+    """
+    folder = machine.root / "Footage"
+    folder.mkdir(parents=True, exist_ok=True)
+    for index in range(count // 2):
+        blob = os.urandom(6 * 1024 * 1024)
+        (folder / f"clip-{index}.mov").write_bytes(blob)
+        (folder / f"clip-{index} copy.mov").write_bytes(blob)
+
+
+@when("the browser starts looking for duplicates", target_fixture="scan")
+def browser_starts_duplicates(client: TestClient, machine: Machine) -> Future[float]:
+    pool = ThreadPoolExecutor(max_workers=2)
+
+    def run() -> float:
+        response = client.get("/api/duplicates", params={"root": str(machine.root)})
+        assert response.status_code == 200, response.text
+        return time.monotonic()
+
+    return pool.submit(run)
+
+
+@when("the browser asks for the page while that is still running", target_fixture="page")
+def browser_asks_for_page(client: TestClient, scan: Future[float]) -> float:
+    # Give the scan a head start so "finished first" cannot be a coincidence of
+    # scheduling. If the request were being served on the event loop, this whole
+    # call would queue behind it and arrive after.
+    time.sleep(0.05)
+    assert not scan.done(), "the duplicate scan finished too fast to prove anything"
+    response = client.get("/")
+    assert response.status_code == 200
+    return time.monotonic()
+
+
+@then("the page comes back before the duplicate scan does")
+def page_comes_back_first(page: float, scan: Future[float]) -> None:
+    assert page < scan.result(timeout=60), (
+        "the page waited for the duplicate scan — a long job is holding the event loop, "
+        "so the whole interface freezes while it runs"
+    )

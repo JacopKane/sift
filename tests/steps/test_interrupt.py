@@ -13,7 +13,7 @@ from langgraph.types import Command
 from pytest_bdd import parsers, scenarios, then, when
 
 from sift.config import settings
-from sift.models import ScanNode, Verdict
+from sift.models import Candidate, ScanNode, Verdict
 from sift.review import ASK_ABOVE, Question, build_review
 from sift.survey import candidates_for_model
 from tests.machine import Machine
@@ -40,7 +40,7 @@ class Run:
             return []
         return [Question.model_validate(entry) for entry in raw[0].value]
 
-    def start(self, candidates: list) -> None:
+    def start(self, candidates: list[Candidate]) -> None:
         self.state = self.graph.invoke({"tree": self.tree, "candidates": candidates}, config=THREAD)
 
     def answer(self, replies: dict[str, str]) -> None:

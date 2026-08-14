@@ -89,12 +89,18 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
     # Mounted last in create_app so the API routes above always win.
     app.mount("/_app", StaticFiles(directory=STATIC / "_app"), name="assets")
 
+    # Everything below is `def`, not `async def`, and deliberately so. These
+    # handlers walk disks, hash gigabytes and wait on a model; a coroutine doing
+    # that holds the event loop, and one duplicate scan is enough to freeze the
+    # page, the survey stream and every other request until it finishes. Declared
+    # synchronous, Starlette runs them in its worker pool and the interface stays
+    # answerable while they work.
     @app.get("/api/survey")
     async def survey_endpoint(root: str, judge: bool = False) -> EventSourceResponse:
         return EventSourceResponse(_stream(Path(root).expanduser(), home, judge, surveyed))
 
     @app.post("/api/ask")
-    async def ask_endpoint(question: Question) -> dict[str, Any]:
+    def ask_endpoint(question: Question) -> dict[str, Any]:
         tree = surveyed.get(str(Path(question.root).expanduser()))
         if tree is None:
             raise HTTPException(409, "Survey that folder first, then ask about it.")
@@ -125,7 +131,7 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
         }
 
     @app.post("/api/basket")
-    async def basket_add(request: Basketed) -> dict[str, Any]:
+    def basket_add(request: Basketed) -> dict[str, Any]:
         tree = _surveyed_or_409(surveyed, request.root)
         try:
             basket.add(item_for(tree, Path(request.path), overridden=request.override))
@@ -135,12 +141,12 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
         return _basket_state(basket)
 
     @app.delete("/api/basket")
-    async def basket_clear() -> dict[str, Any]:
+    def basket_clear() -> dict[str, Any]:
         basket.clear()
         return _basket_state(basket)
 
     @app.post("/api/basket/empty")
-    async def basket_empty(root: str) -> dict[str, Any]:
+    def basket_empty(root: str) -> dict[str, Any]:
         _surveyed_or_409(surveyed, root)
         receipt = basket.empty_into(held)
         return {
@@ -151,12 +157,12 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
         }
 
     @app.post("/api/undo")
-    async def undo() -> dict[str, Any]:
+    def undo() -> dict[str, Any]:
         receipt = held.undo()
         return {"restored": [str(entry.original) for entry in receipt.moved]}
 
     @app.get("/api/duplicates")
-    async def duplicates(root: str) -> dict[str, Any]:
+    def duplicates(root: str) -> dict[str, Any]:
         tree = _surveyed_or_409(surveyed, root)
         report = find_duplicates(tree)
         return {
@@ -174,7 +180,7 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
         }
 
     @app.post("/api/dropped")
-    async def dropped(folder: Dropped) -> dict[str, Any]:
+    def dropped(folder: Dropped) -> dict[str, Any]:
         """Plan a folder the browser walked itself, without touching this disk."""
         tree = _tree_from(folder)
         _name_what_we_can(tree)

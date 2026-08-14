@@ -7,7 +7,7 @@ exercised here is the model, because these run on every commit.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from fastapi.testclient import TestClient
 from pytest_bdd import parsers, scenarios, then, when
@@ -105,7 +105,7 @@ def _reports(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _plan(events: list[dict[str, Any]]) -> dict[str, Any]:
     done = [e["data"] for e in events if e["event"] == "done"]
     assert len(done) == 1, f"expected exactly one completion event, got {len(done)}"
-    return done[0]["plan"]
+    return cast(dict[str, Any], done[0]["plan"])
 
 
 def _report_for(events: list[dict[str, Any]], machine: Machine, relpath: str) -> dict[str, Any]:

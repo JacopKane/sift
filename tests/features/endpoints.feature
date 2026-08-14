@@ -40,3 +40,10 @@ Feature: What the browser can do
     When the browser sends a dropped folder
     Then it gets back a plan for what was dropped
     And nothing on the server's disk was read
+
+  Scenario: A slow job does not freeze everything else
+    Given 12 large files, half of them copies of the other half
+    When the browser surveys the machine
+    And the browser starts looking for duplicates
+    And the browser asks for the page while that is still running
+    Then the page comes back before the duplicate scan does

@@ -14,7 +14,7 @@ from pytest_bdd import scenarios, then, when
 
 from sift.classify import classify
 from sift.config import settings
-from sift.models import Classification, Plan, ScanNode, Verdict
+from sift.models import Candidate, Classification, Plan, ScanNode, Verdict
 from sift.plan import build_plan
 from sift.survey import candidates_for_model, survey
 from tests.machine import Machine
@@ -25,7 +25,7 @@ scenarios("safety.feature")
 @dataclass
 class Pipeline:
     tree: ScanNode
-    candidates: list
+    candidates: list[Candidate]
     judgements: list[Classification]
     plan: Plan
     chart: ScanNode
