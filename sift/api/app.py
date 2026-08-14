@@ -24,6 +24,7 @@ from sift.catalog import load_catalog
 from sift.classify import classify
 from sift.duplicates import find_duplicates
 from sift.models import Classification, Plan, ScanNode, Verdict
+from sift.places import places
 from sift.plan import build_plan
 from sift.quarantine import Quarantine
 from sift.scanner import boot_volume_exclusions
@@ -96,6 +97,15 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
     # page, the survey stream and every other request until it finishes. Declared
     # synchronous, Starlette runs them in its worker pool and the interface stays
     # answerable while they work.
+    @app.get("/api/places")
+    def places_endpoint() -> dict[str, Any]:
+        return {
+            "places": [
+                {"label": place.label, "path": str(place.path), "icon": place.icon}
+                for place in places(home)
+            ]
+        }
+
     @app.get("/api/survey")
     async def survey_endpoint(root: str, judge: bool = False) -> EventSourceResponse:
         return EventSourceResponse(_stream(Path(root).expanduser(), home, judge, surveyed, judged))

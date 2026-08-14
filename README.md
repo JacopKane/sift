@@ -10,7 +10,7 @@
 uvx --refresh --from git+https://github.com/JacopKane/sift sift
 ```
 
-A window opens asking which folder — drop one in, or pick Downloads, Desktop or the whole disk. No config screen.
+A window opens asking which folder — pick one of the places on your machine, or drop any folder in. No config screen.
 
 `--refresh` skips `uvx`'s build cache. Without it a second run can silently start
 an older copy, which looks exactly like the new one until it behaves differently.
@@ -32,7 +32,10 @@ Gemini's free tier is enough — set `SIFT_REQUESTS_PER_MINUTE=12` with one.
 Sift prints which of the two it's running with on the line after the URL, before
 you touch anything.
 
-Skip the question by naming a folder: `sift ~/Projects` · Whole disk: `sift /`
+Skip the question by naming a folder: `sift ~/Projects`
+
+The whole disk is not on that first screen on purpose — it is a scan of every file
+with a permission dialog in the middle. Ask for it deliberately: `sift /`
 
 ---
 

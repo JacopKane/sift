@@ -1,8 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
-	import HardDrive from '@lucide/svelte/icons/hard-drive';
 	import Download from '@lucide/svelte/icons/download';
 	import Monitor from '@lucide/svelte/icons/monitor';
+	import FileText from '@lucide/svelte/icons/file-text';
+	import Image from '@lucide/svelte/icons/image';
+	import LayoutGrid from '@lucide/svelte/icons/layout-grid';
+	import Folder from '@lucide/svelte/icons/folder';
 
 	let {
 		onDropped,
@@ -22,11 +26,25 @@
 	let problem = $state('');
 	let read = $state(0);
 
-	const SHORTCUTS = [
-		{ label: 'Downloads', path: '~/Downloads', icon: Download },
-		{ label: 'Desktop', path: '~/Desktop', icon: Monitor },
-		{ label: 'Whole disk', path: '/', icon: HardDrive }
-	];
+	type Place = { label: string; path: string; icon: string };
+
+	// Which folders exist and what this platform calls them is a question about
+	// the machine, so the machine answers it. Hard-coded here it would be right
+	// on macOS and quietly wrong everywhere else.
+	const ICONS: Record<string, typeof Folder> = {
+		download: Download,
+		monitor: Monitor,
+		'file-text': FileText,
+		image: Image,
+		'layout-grid': LayoutGrid
+	};
+
+	let places = $state<Place[]>([]);
+
+	onMount(async () => {
+		const res = await fetch('/api/places');
+		if (res.ok) places = (await res.json()).places;
+	});
 
 	async function walk(
 		entry: FileSystemDirectoryEntry,
@@ -111,23 +129,34 @@
 			</p>
 		{:else}
 			<div>
-				<p class="display">Drop a folder here</p>
+				<p class="display">Where should I look?</p>
 				<p class="mt-1.5 text-[13px]" style="color: var(--muted)">
-					Nothing is uploaded — only names and sizes are read.
+					Pick one, or drop any folder here. Nothing is uploaded — only names and
+					sizes are read.
 				</p>
 			</div>
 		{/if}
 
-		<div class="mt-2 flex flex-wrap items-center justify-center gap-2">
-			{#each SHORTCUTS as shortcut (shortcut.path)}
+		<!--
+			The places are the answer to the question above them, so they are the
+			thing on this screen — full-width targets rather than chips under a
+			heading. The whole disk is not among them on purpose: it is forty
+			seconds behind a permission dialog, fine to ask for with `sift /` and a
+			poor first impression to leave under the cursor.
+		-->
+		<div class="mt-1 grid w-full max-w-sm gap-2">
+			{#each places as place (place.path)}
+				{@const Icon = ICONS[place.icon] ?? Folder}
 				<button
 					type="button"
-					onclick={() => onPick(shortcut.path)}
-					class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] transition-colors hover:bg-[var(--raised)]"
-					style="border-color: var(--edge); color: var(--text)"
+					onclick={() => onPick(place.path)}
+					disabled={reading}
+					class="flex items-center gap-3 rounded-xl border px-4 py-3 text-left text-[14px] transition-colors hover:border-[var(--edge-strong)] hover:bg-[var(--raised)] disabled:opacity-50"
+					style="border-color: var(--edge); background: var(--surface); color: var(--text)"
 				>
-					<shortcut.icon size={14} aria-hidden="true" />
-					{shortcut.label}
+					<Icon size={18} aria-hidden="true" style="color: var(--muted)" />
+					<span class="flex-1 font-medium">{place.label}</span>
+					<span class="meta truncate">{place.path.replace(/^\/Users\/[^/]+/, '~')}</span>
 				</button>
 			{/each}
 		</div>
