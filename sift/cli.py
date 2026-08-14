@@ -37,12 +37,31 @@ def main() -> None:
         threading.Timer(1.0, webbrowser.open, args=(launch_url(options),)).start()
 
     print(f"Sift is at http://127.0.0.1:{options.port}/")
+    print(setup_line())
     uvicorn.run(
         "sift.api:create_app",
         factory=True,
         host="127.0.0.1",
         port=options.port,
         log_level="warning",
+    )
+
+
+def setup_line() -> str:
+    """One line saying what this run can actually do.
+
+    Said at startup rather than discovered mid-survey. Without a key the rules
+    still settle most of a disk, so Sift is useful either way — but finding that
+    out when a scan stalls in front of someone is not the moment to learn it.
+    """
+    from sift.config import settings
+
+    conf = settings()
+    if conf.api_key:
+        return f"Rules and model ({conf.provider}, {conf.model})."
+    return (
+        f"Rules only — no key for {conf.provider}. Folders the rules cannot name "
+        "will go unjudged. Put a key in .env to turn the model on."
     )
 
 

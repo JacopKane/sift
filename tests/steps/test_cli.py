@@ -12,7 +12,8 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
-from sift.cli import free_port, launch_url, parse_arguments
+from sift import config
+from sift.cli import free_port, launch_url, parse_arguments, setup_line
 
 scenarios("cli.feature")
 
@@ -95,3 +96,38 @@ def stops_and_says_so(outcome: BaseException | int) -> None:
         "a request, and swapping it silently sends you to the wrong window"
     )
     assert "in use" in str(outcome).lower(), str(outcome)
+
+
+@pytest.fixture(autouse=True)
+def _forget_settings() -> Iterator[None]:
+    config.settings.cache_clear()
+    yield
+    config.settings.cache_clear()
+
+
+@given("no provider key is configured")
+def no_key_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A provider nobody has a key for, which is what an unconfigured machine
+    # looks like from here.
+    monkeypatch.setenv("SIFT_PROVIDER", "anthropic")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    config.settings.cache_clear()
+
+
+@when("sift reports what it is set up with", target_fixture="reported")
+def sift_reports_setup() -> str:
+    return setup_line()
+
+
+@then("it says the rules will run and the model will not")
+def says_what_will_and_will_not_run(reported: str) -> None:
+    assert "rules" in reported.lower(), reported
+    assert "no key" in reported.lower(), (
+        "starting silently without a key means the first sign of trouble is a "
+        f"survey stalling in front of an audience: {reported!r}"
+    )
+
+
+@then("it names the file to put a key in")
+def names_the_file(reported: str) -> None:
+    assert ".env" in reported, reported

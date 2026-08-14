@@ -315,6 +315,11 @@ def _stream(
         yield {"event": "failed", "data": json.dumps({"reason": _why(root, failure)})}
 
 
+def _short(failure: Exception) -> str:
+    detail = str(failure).strip().splitlines()
+    return (detail[0] if detail else failure.__class__.__name__)[:120]
+
+
 def _why(root: Path, failure: Exception) -> str:
     """What to tell someone, in their words, about why the survey stopped."""
     if isinstance(failure, PermissionError):
@@ -352,6 +357,7 @@ def _walk_and_judge(
         surveyed[str(root)] = tree
 
     judgements: list[Classification] = []
+    note = ""
     if judge:
         candidates = candidates_for_model(tree)
         if candidates:
@@ -359,7 +365,18 @@ def _walk_and_judge(
                 "event": "judging",
                 "data": json.dumps({"count": len(candidates)}),
             }
-            judgements = classify(candidates)
+            try:
+                judgements = classify(candidates)
+            except Exception as failure:
+                # The disk has already been read. Throwing that away because a key
+                # expired or the wifi dropped loses everything the rules knew —
+                # which is most of a disk — for a reason that has nothing to do
+                # with the disk. The model is the part that is optional here.
+                note = (
+                    f"{len(candidates)} folders went unjudged: the model could not "
+                    f"be reached ({_short(failure)}). Everything the rules recognise "
+                    "is below; check your key in .env and survey again for the rest."
+                )
 
     # Built before the verdicts are written back, and the order is load-bearing.
     # _apply makes a model verdict indistinguishable from a catalog one, so a tree
@@ -376,7 +393,11 @@ def _walk_and_judge(
     yield {
         "event": "done",
         "data": json.dumps(
-            {"plan": plan.model_dump(mode="json"), "chart": _chart(tree, tree.size_bytes)}
+            {
+                "plan": plan.model_dump(mode="json"),
+                "chart": _chart(tree, tree.size_bytes),
+                "note": note,
+            }
         ),
     }
 

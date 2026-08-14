@@ -22,3 +22,9 @@ Feature: Starting from the command line
     Given something else is already holding the usual port
     When sift is launched asking for that exact port
     Then it stops and says the port is taken
+
+  Scenario: It says on startup whether it can reach a model
+    Given no provider key is configured
+    When sift reports what it is set up with
+    Then it says the rules will run and the model will not
+    And it names the file to put a key in

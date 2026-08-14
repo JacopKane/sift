@@ -7,21 +7,30 @@
 ## Run it
 
 ```bash
-uvx --from git+https://github.com/JacopKane/sift sift
+uvx --refresh --from git+https://github.com/JacopKane/sift sift
 ```
 
-That's it. A window opens asking which folder — drop one in, or pick Downloads, Desktop or the whole disk. No config screen.
+A window opens asking which folder — drop one in, or pick Downloads, Desktop or the whole disk. No config screen.
 
-**You need one API key.** Rules settle most of a disk on their own; the model
-names the rest, and the test suite calls it for real rather than replaying a
-recording.
+`--refresh` skips `uvx`'s build cache. Without it a second run can silently start
+an older copy, which looks exactly like the new one until it behaves differently.
+
+**A key is optional, and worth having.** The rules settle most of a disk without
+one. The model names what's left — the folders no rule recognises, which is where
+the interesting decisions are. Without a key those go unjudged and the app says so.
 
 ```bash
-cp .env.example .env      # paste one key: Gemini, OpenAI, or Claude
+export OPENAI_API_KEY=sk-...     # or GOOGLE_API_KEY, or ANTHROPIC_API_KEY
+export SIFT_PROVIDER=openai      # google_genai · openai · anthropic
 ```
 
-Gemini's free tier is enough to try it — set `SIFT_REQUESTS_PER_MINUTE=12` with one.
-Without a key, Sift still runs on the rules alone and 70 of the 92 test scenarios pass.
+Or put the same lines in a `.env` file **in the directory you run from** — that's
+where it looks. Cloned the repo? `cp .env.example .env`.
+
+Gemini's free tier is enough — set `SIFT_REQUESTS_PER_MINUTE=12` with one.
+
+Sift prints which of the two it's running with on the line after the URL, before
+you touch anything.
 
 Skip the question by naming a folder: `sift ~/Projects` · Whole disk: `sift /`
 
@@ -105,6 +114,16 @@ uv sync && uv run sift
 Test-first in Gherkin, nothing mocked — not the filesystem, not the model. See [CLAUDE.md](CLAUDE.md).
 
 Rebuild the frontend after changing it: `cd web && npm run build`
+
+---
+
+## If something goes wrong
+
+- **Port in use.** Sift moves to the next free port and prints where it went. Pass `--port` and it will refuse to move instead — you asked for that one.
+- **It behaves like an older version.** That's the `uvx` cache. Add `--refresh`.
+- **"The model could not be reached."** The survey is still there and still usable; only the unnamed folders went unjudged. Check the key in `.env`, then survey again.
+- **macOS blocks a folder.** Only a real permission error says so, and it names the setting: System Settings > Privacy & Security > Full Disk Access, for the terminal you launched from.
+- **Nothing seems to delete.** It moves to your Trash, and the list updates to match. If a row is still there, it did not move — the status line will say what refused.
 
 ---
 

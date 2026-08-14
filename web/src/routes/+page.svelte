@@ -113,6 +113,9 @@
 			plan = payload.plan;
 			surveyedRoot = where;
 			status = `${counted.toLocaleString()} folders`;
+			// A survey that came back without the model is still a survey. Shown as
+			// a notice beside the results rather than instead of them.
+			problem = payload.note ?? '';
 			surveying = false;
 			stream.close();
 		});

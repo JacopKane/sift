@@ -58,3 +58,11 @@ Feature: Serving a survey to a browser
     When the survey is asked for a folder that is not there
     Then the stream says what went wrong in words
     And it does not blame the disk permissions
+
+  Scenario: A survey outlives a model that will not answer
+    Given a machine that looks like a developer's Mac
+    And the model layer cannot answer
+    When the browser surveys the machine and asks the model
+    Then it still gets a plan for what the rules recognised
+    And it is told the model could not be reached
+    And it is not told the survey failed

@@ -7,11 +7,14 @@ exercised here is the model, because these run on every commit.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from typing import Any, cast
 
+import pytest
 from fastapi.testclient import TestClient
-from pytest_bdd import parsers, scenarios, then, when
+from pytest_bdd import given, parsers, scenarios, then, when
 
+from sift import config
 from sift.api import create_app
 from tests.machine import Machine
 
@@ -219,3 +222,49 @@ def stream_says_what_went_wrong(events: list[dict[str, Any]]) -> None:
 def does_not_blame_permissions(events: list[dict[str, Any]]) -> None:
     reason = [e for e in events if e["event"] == "failed"][-1]["data"]["reason"].lower()
     assert "full disk access" not in reason, f"sent someone to System Settings over {reason!r}"
+
+
+@pytest.fixture(autouse=True)
+def _forget_settings() -> Iterator[None]:
+    config.settings.cache_clear()
+    yield
+    config.settings.cache_clear()
+
+
+@given("the model layer cannot answer")
+def the_model_layer_cannot_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real failure, not a stubbed one: the client genuinely cannot be built.
+
+    A typo in SIFT_PROVIDER is the demo failure this stands in for, and it fails
+    in the same place an expired key or a dropped connection does — inside
+    classify, with the survey already done and worth keeping.
+    """
+    monkeypatch.setenv("SIFT_PROVIDER", "no-such-provider")
+    config.settings.cache_clear()
+
+
+@then("it still gets a plan for what the rules recognised")
+def still_gets_a_plan(events: list[dict[str, Any]]) -> None:
+    done = [event for event in events if event["event"] == "done"]
+    assert done, (
+        "the model fell over and took the survey with it. Everything the rules "
+        "already knew was thrown away — a demo dies here for a reason that has "
+        "nothing to do with the disk"
+    )
+    plan = done[-1]["data"]["plan"]
+    assert plan["proposals"], "the rules alone recognise most of a disk; none of it survived"
+    assert plan["reclaimable_bytes"] > 0
+
+
+@then("it is told the model could not be reached")
+def told_the_model_failed(events: list[dict[str, Any]]) -> None:
+    done = [event for event in events if event["event"] == "done"][-1]
+    assert done["data"].get("note"), (
+        "it quietly returned a rules-only plan as though that were the whole "
+        "answer — silence here is worse than the failure"
+    )
+
+
+@then("it is not told the survey failed")
+def not_told_the_survey_failed(events: list[dict[str, Any]]) -> None:
+    assert not [event for event in events if event["event"] == "failed"]
