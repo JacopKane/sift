@@ -66,3 +66,9 @@ Feature: Serving a survey to a browser
     Then it still gets a plan for what the rules recognised
     And it is told the model could not be reached
     And it is not told the survey failed
+
+  Scenario: The stream says enough to draw with while it is still counting
+    Given a machine that looks like a developer's Mac
+    When the browser surveys the machine
+    Then each folder arrives with a name and a size
+    And folders arrive well before the plan does

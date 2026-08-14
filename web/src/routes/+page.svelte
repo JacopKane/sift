@@ -15,7 +15,8 @@
 	import DuplicateStack from '$lib/components/DuplicateStack.svelte';
 	import Legend from '$lib/components/Legend.svelte';
 	import Totals, { type Total } from '$lib/components/Totals.svelte';
-	import { size } from '$lib/format';
+	import Scanning from '$lib/components/Scanning.svelte';
+	import { size, type Verdict } from '$lib/format';
 	import type { Plan, AskResult, BasketState, DuplicateReport } from '$lib/types';
 
 	const STEPS = ['Choose', 'Review', 'Reclaim'];
@@ -37,6 +38,24 @@
 	let basket = $state<BasketState>({ items: [], total_bytes: 0 });
 	let duplicates = $state<DuplicateReport | null>(null);
 	let hunting = $state(false);
+
+	// The biggest folders seen so far, so the map has something true to draw
+	// while the walk is still running. Capped and re-sorted rather than kept
+	// whole: a disk scan reports hundreds of thousands of these, and all the map
+	// can show is the largest handful anyway.
+	const LIVE_ARCS = 14;
+
+	/** Whether one path contains the other, either way round. */
+	function overlapping(a: string, b: string): boolean {
+		return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+	}
+	let seen = $state<{ name: string; path: string; size_bytes: number; verdict: Verdict }[]>([]);
+	let judging = $state(0);
+	let latest = $state('');
+	// What has been found so far, from the disjoint set actually being drawn.
+	// Adding up every directory reported would count each one again for every
+	// level above it — on /Applications that read 249 GB of a 35 GB folder.
+	const found = $derived(seen.reduce((total, node) => total + node.size_bytes, 0));
 
 	const kept = $derived(plan ? plan.irreplaceable.reduce((t, i) => t + i.size_bytes, 0) : 0);
 	const safe = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'regenerable') : []);
@@ -86,17 +105,32 @@
 		answer = null;
 		problem = '';
 		failed = false;
+		seen = [];
+		judging = 0;
+		latest = '';
 
 		const stream = new EventSource(`/api/survey?root=${encodeURIComponent(where)}&judge=true`);
 
 		stream.addEventListener('directory', (e) => {
 			counted += 1;
+			const node = JSON.parse(e.data);
+			latest = node.path;
+
+			// Kept disjoint, or the arcs would count the same bytes at every depth.
+			// Anything overlapping something already held is skipped, which also
+			// handles the last event of every walk: the root arrives last and
+			// contains everything, and letting it in collapses the whole map to one
+			// arc at the exact moment the judging phase begins.
+			if (!seen.some((kept) => overlapping(kept.path, node.path))) {
+				seen = [...seen, node].sort((a, b) => b.size_bytes - a.size_bytes).slice(0, LIVE_ARCS);
+			}
 			if (counted % 50 === 0 || counted < 10) {
-				status = `${counted.toLocaleString()} folders · ${JSON.parse(e.data).name}`;
+				status = `${counted.toLocaleString()} folders`;
 			}
 		});
 		stream.addEventListener('judging', (e) => {
-			status = `judging ${JSON.parse(e.data).count}…`;
+			judging = JSON.parse(e.data).count;
+			status = `judging ${judging}…`;
 		});
 		// The server says why it stopped. Guessing is how a model timing out came
 		// back as "macOS is blocking your Downloads folder" — a confident wrong
@@ -117,6 +151,7 @@
 			// a notice beside the results rather than instead of them.
 			problem = payload.note ?? '';
 			surveying = false;
+			judging = 0;
 			stream.close();
 		});
 		stream.onerror = () => {
@@ -285,12 +320,21 @@
 			class="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[340px_minmax(0,1fr)_290px]"
 		>
 			<section class="scroller hidden min-h-0 flex-col gap-4 pr-1 lg:flex" aria-label="Disk map">
-				<Sunburst tree={chart} root={surveyedRoot} />
+				<Sunburst tree={chart} root={surveyedRoot} partial={seen} scanning={surveying} />
 
 				{#if plan}
 					<div>
 						<h2 class="label mb-1">Breakdown</h2>
 						<Totals rows={totals} />
+					</div>
+				{:else if surveying}
+					<div aria-hidden="true">
+						<h2 class="label mb-1">Breakdown</h2>
+						<div class="flex flex-col gap-2.5 pt-1">
+							{#each [0, 1, 2] as row (row)}
+								<div class="skeleton h-4 w-full"></div>
+							{/each}
+						</div>
 					</div>
 				{/if}
 
@@ -354,7 +398,23 @@
 					</form>
 				{/if}
 
-				{#if answer}
+				{#if asking}
+					<section class="panel shrink-0 px-4 py-3.5" aria-label="Thinking">
+						<div class="flex items-center gap-2.5">
+							<span class="spinning inline-block" style="color: var(--regenerable)" aria-hidden="true">
+								<Sparkles size={16} />
+							</span>
+							<span class="label flex-1" style="color: var(--text)">Looking through the survey</span>
+						</div>
+						<div class="mt-3 flex flex-col gap-2" aria-hidden="true">
+							{#each [90, 70, 52] as width, index (index)}
+								<div class="skeleton h-[26px]" style="width: {width}%"></div>
+							{/each}
+						</div>
+					</section>
+				{/if}
+
+				{#if answer && !asking}
 					<Group
 						title="What you asked for"
 						count={answer.selected.length}
@@ -400,6 +460,10 @@
 					</Group>
 				{/if}
 
+				{#if surveying}
+					<Scanning {counted} {judging} {latest} bytes={found} />
+				{/if}
+
 				{#if plan}
 					<Group
 						title="Suggestions"
@@ -429,10 +493,10 @@
 									class="flex w-full items-center justify-center gap-2 text-[12px] transition-colors hover:text-[var(--text)] disabled:opacity-50"
 									style="color: var(--muted)"
 								>
-									<Copy size={13} aria-hidden="true" />
-									{hunting
-										? 'Reading files that share a size…'
-										: 'Also look for duplicates'}
+									<span class:spinning={hunting} class="inline-block" aria-hidden="true">
+										<Copy size={13} />
+									</span>
+									{hunting ? 'Reading files that share a size…' : 'Also look for duplicates'}
 								</button>
 							{/if}
 						{/snippet}

@@ -11,7 +11,41 @@
 		children: ChartNode[];
 	};
 
-	let { tree, root }: { tree: ChartNode | null; root?: string | null } = $props();
+	let {
+		tree,
+		root,
+		partial = [],
+		scanning = false
+	}: {
+		tree: ChartNode | null;
+		root?: string | null;
+		/** Directories seen so far, while the walk is still running. */
+		partial?: { name: string; path: string; size_bytes: number; verdict: Verdict }[];
+		scanning?: boolean;
+	} = $props();
+
+	// While the walk runs there is no tree yet, but every folder has already
+	// reported its size — so the map can be drawn from what has landed. It
+	// reshuffles as bigger things turn up, which is exactly what is happening.
+	const live = $derived<ChartNode | null>(
+		scanning && partial.length
+			? {
+					name: root ?? '',
+					path: root ?? '',
+					size_bytes: partial.reduce((total, node) => total + node.size_bytes, 0),
+					verdict: null,
+					label: null,
+					unreadable: false,
+					children: partial.map((node) => ({
+						...node,
+						label: null,
+						unreadable: false,
+						children: []
+					}))
+				}
+			: null
+	);
+	const drawn = $derived(tree ?? live);
 
 	type Arc = { node: ChartNode; depth: number; d: string };
 
@@ -31,6 +65,7 @@
 	}
 
 	const arcs = $derived.by(() => {
+		const tree = drawn;
 		if (!tree) return [] as Arc[];
 		const out: Arc[] = [];
 		const place = (node: ChartNode, depth: number, a0: number, a1: number) => {
@@ -62,13 +97,21 @@
 	);
 
 	let hovered = $state<ChartNode | null>(null);
-	const shown = $derived(hovered ?? tree);
+	const shown = $derived(hovered ?? drawn);
 </script>
 
 <div class="flex min-h-0 flex-col">
+	{#if scanning && !arcs.length}
+		<!-- Nothing has landed yet. A ring the size of the real one, so the column
+		     does not jump the moment the first folder arrives. -->
+		<div class="mx-auto w-full max-w-[290px] shrink-0" aria-hidden="true">
+			<div class="skeleton aspect-square w-full rounded-full"></div>
+		</div>
+	{:else}
 	<svg
 		viewBox={box}
-		class="mx-auto block h-auto w-full max-w-[290px] shrink-0"
+		class="mx-auto block h-auto w-full max-w-[290px] shrink-0 transition-opacity"
+		style="opacity: {scanning ? 0.8 : 1}"
 		role="img"
 		aria-label="Files and folders by size, coloured by what recovery would cost"
 	>
@@ -90,13 +133,17 @@
 			/>
 		{/each}
 	</svg>
+	{/if}
 
 	<!--
 		Fixed height, always occupied. Growing a readout on hover pushes everything
 		below it, so pointing at the map rearranges the page you are pointing at.
 	-->
 	<div class="mt-3 h-[3.4rem] shrink-0 px-0.5" aria-live="polite">
-		{#if shown}
+		{#if scanning && !shown}
+			<div class="skeleton h-6 w-28"></div>
+			<div class="skeleton mt-1.5 h-3 w-44"></div>
+		{:else if shown}
 			<p class="display">{size(shown.size_bytes)}</p>
 			<p class="meta mt-0.5 truncate" title={shown.path}>
 				{hovered ? shown.path : (root ?? shown.name)}

@@ -193,6 +193,48 @@
 	}
 }
 
+/*
+  A placeholder that is honestly a placeholder: the shape of what is coming,
+  breathing slowly enough that it reads as "working" rather than as content.
+  The global reduced-motion rule flattens it to a static block.
+*/
+@utility skeleton {
+	position: relative;
+	overflow: hidden;
+	background: var(--raised);
+	border-radius: 6px;
+	&::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		transform: translateX(-100%);
+		background: linear-gradient(
+			90deg,
+			transparent,
+			color-mix(in oklab, var(--hover) 90%, transparent),
+			transparent
+		);
+		animation: shimmer 1.6s ease-in-out infinite;
+	}
+}
+
+@keyframes shimmer {
+	100% {
+		transform: translateX(100%);
+	}
+}
+
+/* For the one spot where progress is real but its end is unknown. */
+@keyframes spin {
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+@utility spinning {
+	animation: spin 900ms linear infinite;
+}
+
 /* More below the fold, said without a scrollbar to read. */
 @utility fade-bottom {
 	mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent);

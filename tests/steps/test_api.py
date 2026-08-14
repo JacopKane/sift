@@ -268,3 +268,24 @@ def told_the_model_failed(events: list[dict[str, Any]]) -> None:
 @then("it is not told the survey failed")
 def not_told_the_survey_failed(events: list[dict[str, Any]]) -> None:
     assert not [event for event in events if event["event"] == "failed"]
+
+
+@then("each folder arrives with a name and a size")
+def folders_arrive_drawable(events: list[dict[str, Any]]) -> None:
+    folders = [event["data"] for event in events if event["event"] == "directory"]
+    assert folders, "nothing was reported while the walk was running"
+    for folder in folders:
+        assert folder.get("name"), folder
+        assert "size_bytes" in folder, (
+            "a folder with no size cannot be drawn, so the map has nothing to show "
+            f"until the whole walk finishes: {folder}"
+        )
+
+
+@then("folders arrive well before the plan does")
+def folders_arrive_first(events: list[dict[str, Any]]) -> None:
+    kinds = [event["event"] for event in events]
+    assert kinds.index("directory") < kinds.index("done"), (
+        "everything arrives at the end, so there is nothing to show while waiting"
+    )
+    assert kinds.count("directory") > 1
