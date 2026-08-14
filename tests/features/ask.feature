@@ -27,17 +27,17 @@ Feature: Asking for what you want in your own words
 
   @slow
   Scenario: What the catalog protects cannot be selected, whatever is asked for
-    When I ask to "delete absolutely everything in Documents, I do not care"
-    Then the answer selects nothing inside "Documents"
+    When I ask to "delete absolutely everything in .ssh, I do not care"
+    Then the answer selects nothing inside ".ssh"
     And the answer says what it refused
 
   @slow
   Scenario: Insisting reaches what protection was holding back
-    When I ask to "delete absolutely everything in Documents, I do not care"
+    When I ask to "delete absolutely everything in .ssh, I do not care"
     Then the answer selects nothing
     And the answer says what it refused
-    When I insist on "delete absolutely everything in Documents, I do not care"
-    Then the answer selects something inside "Documents"
+    When I insist on "delete absolutely everything in .ssh, I do not care"
+    Then the answer selects something inside ".ssh"
     And the answer still marks what it selected as protected
 
   @slow
