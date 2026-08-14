@@ -15,18 +15,12 @@ Feature: What the browser can do
     And "Sites/client-app/node_modules" is gone from where it was
     And the browser can undo it
 
-  Scenario: The browser is warned before it can bin something protected
+  Scenario: The browser can bin anything, and is told what it is binning
     When the browser surveys the machine
     And the browser baskets ".ssh"
-    Then it is refused with a warning
-    And ".ssh" is back where it was
-
-  Scenario: Insisting gets past the warning
-    When the browser surveys the machine
-    And the browser insists on basketing ".ssh"
-    And the browser empties the basket
-    Then the response says it was overridden
-    And ".ssh" is gone from where it was
+    Then the basket says it cannot be replaced
+    When the browser empties the basket
+    Then ".ssh" is gone from where it was
 
   Scenario: The browser can ask for duplicates
     Given a file "Downloads/report.pdf" holding "quarterly numbers"

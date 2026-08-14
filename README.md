@@ -46,7 +46,7 @@ A 12 GB `node_modules` and 12 GB of holiday photos look identical on a size char
 |---|---|---|
 | ↺ | **rebuilds itself** | a command brings it back — deleting costs only time |
 | ? | **needs a decision** | mixed, or genuinely unclear — look before you act |
-| ✕ | **can't be replaced** | no command reproduces this |
+| ✕ | **can't be replaced** | no command reproduces this — never proposed, always yours to take |
 
 Colour is never the only signal — each verdict has its own glyph and its own words.
 
@@ -54,9 +54,10 @@ Colour is never the only signal — each verdict has its own glyph and its own w
 
 ## Safety
 
-- **Nothing is deleted.** Reclaiming *moves* to quarantine with a manifest. Emptying it is your separate, deliberate act.
-- **Protected by kind, not by location.** `~/.ssh`, `~/.gnupg`, `~/Library/Keychains`, and any `src/` beside a manifest. Your Desktop is where you work, not a vault — it needs a decision, not a lock.
-- **Warnings, not locks.** You can override any of it — it's your disk. The override is recorded on the receipt.
+- **Nothing is locked.** There is no protected list and nothing you can be refused. It's your disk.
+- **Nothing is deleted either.** Reclaiming *moves* to quarantine with a manifest. Emptying it is your separate, deliberate act, behind a countdown you can cancel.
+- **You always know what you picked.** The verdict travels with a file — into the basket, onto the receipt, into the manifest. The basket says how many of its contents can't be replaced before you empty it.
+- **It proposes, you choose.** Sift never *proposes* deleting something irreplaceable; it puts it under "can't be replaced" and leaves it there. Taking it is one click, same as anything else.
 - **Your files stay put.** Names, sizes and extensions go to the model. File contents never leave your machine.
 
 ---
@@ -78,7 +79,7 @@ SIFT_PROVIDER=openai        # or google_genai, anthropic
 SIFT_MODEL=gpt-5.4-mini
 ```
 
-Worth knowing: two frontier models disagreed about whether it's safe to delete a `src/` directory. That's why source is protected by a rule and never put to a model.
+Worth knowing: two frontier models disagreed about whether it's safe to delete a `src/` directory. That's why source is settled by a rule and never put to a model — the verdict has to be stable even when the model isn't.
 
 ---
 

@@ -6,8 +6,8 @@ import pytest
 from pytest_bdd import parsers, scenarios, then, when
 
 from sift.basket import Basket, item_for
-from sift.models import ScanNode
-from sift.quarantine import Protected, Quarantine, Receipt
+from sift.models import ScanNode, Verdict
+from sift.quarantine import Quarantine, Receipt
 from tests.machine import Machine
 
 scenarios("basket.feature")
@@ -21,22 +21,6 @@ def basket() -> Basket:
 @when(parsers.parse('I put "{relpath}" in the basket'))
 def i_put_in_the_basket(basket: Basket, machine: Machine, surveyed: ScanNode, relpath: str) -> None:
     basket.add(item_for(surveyed, machine.path(relpath)))
-
-
-@when(parsers.parse('I insist on putting "{relpath}" in the basket'))
-def i_insist(basket: Basket, machine: Machine, surveyed: ScanNode, relpath: str) -> None:
-    basket.add(item_for(surveyed, machine.path(relpath), overridden=True))
-
-
-@when(parsers.parse('I try to put "{relpath}" in the basket'), target_fixture="warning")
-def i_try_to_put(
-    basket: Basket, machine: Machine, surveyed: ScanNode, relpath: str
-) -> Exception | None:
-    try:
-        basket.add(item_for(surveyed, machine.path(relpath)))
-    except Protected as refused:
-        return refused
-    return None
 
 
 @when("I empty the basket", target_fixture="receipt")
@@ -64,17 +48,22 @@ def receipt_says_what_could_not(receipt: Receipt) -> None:
     assert receipt.refused, "a silent partial success is worse than a reported failure"
 
 
-@then(parsers.parse('it warns that "{relpath}" cannot be replaced'))
-def it_warns(warning: Exception | None, relpath: str) -> None:
-    assert isinstance(warning, Protected)
-    assert "cannot be replaced" in str(warning)
-    assert relpath.split("/")[-1] in str(warning)
+@then(parsers.parse('the basket says "{name}" cannot be replaced'))
+def basket_says_cannot_be_replaced(basket: Basket, name: str) -> None:
+    chosen = [item for item in basket.items if item.path.name == name]
+    assert chosen, f"{name} never made it into the basket"
+    assert all(item.verdict is Verdict.IRREPLACEABLE for item in chosen), (
+        f"{name} went in unlabelled — the verdict is the only thing telling you what you picked"
+    )
 
 
-@then("the receipt records that it was overridden")
-def receipt_records_override(receipt: Receipt) -> None:
-    assert any(entry.overridden for entry in receipt.moved), (
-        "forcing a protected delete has to be visible on the receipt afterwards"
+@then(parsers.parse('the receipt records "{name}" as irreplaceable'))
+def receipt_records_verdict(receipt: Receipt, name: str) -> None:
+    entries = [entry for entry in receipt.moved if entry.original.name == name]
+    assert entries, f"{name} is not on the receipt"
+    assert all(entry.verdict is Verdict.IRREPLACEABLE for entry in entries), (
+        "what a thing was judged to be has to survive onto the receipt, or an undo "
+        "later is a list of paths with no way to tell which mattered"
     )
 
 

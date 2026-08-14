@@ -82,7 +82,7 @@ def map_is_not_one_colour(events: list[dict[str, Any]]) -> None:
 @then("the plan the browser receives accounts for no more than was surveyed")
 def served_plan_adds_up(events: list[dict[str, Any]]) -> None:
     plan = _plan(events)
-    claimed = sum(item["size_bytes"] for item in [*plan["proposals"], *plan["protected"]])
+    claimed = sum(item["size_bytes"] for item in [*plan["proposals"], *plan["irreplaceable"]])
     assert claimed <= plan["surveyed_bytes"], (
         f"the served plan claims {claimed} bytes of a {plan['surveyed_bytes']} byte "
         "survey, so colouring the tree made something count twice"

@@ -35,11 +35,12 @@ Feature: Reclaiming space, reversibly
     Then "Sites/client-app/src" is back where it was
     And "Sites/client-app/src" is not in quarantine
 
-  Scenario: Nothing protected can be reclaimed, however it is asked for
-    When I try to reclaim ".ssh"
-    Then it refuses
-    And ".ssh" is back where it was
-    And quarantine is empty
+  Scenario: Something irreplaceable is moved aside like anything else, and recorded as what it is
+    When I reclaim ".ssh"
+    Then ".ssh" is gone from where it was
+    And the manifest records ".ssh" as irreplaceable
+    When I undo
+    Then ".ssh" is back where it was
 
   Scenario: Two reclaims are both remembered
     When I reclaim "Sites/client-app/node_modules"

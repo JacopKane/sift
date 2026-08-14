@@ -104,7 +104,7 @@ def mixed_never_disposable(run: Pipeline) -> None:
 
 @then("the plan never accounts for more bytes than the disk holds")
 def plan_adds_up(run: Pipeline) -> None:
-    claimed = sum(item.size_bytes for item in [*run.plan.proposals, *run.plan.protected])
+    claimed = sum(item.size_bytes for item in [*run.plan.proposals, *run.plan.irreplaceable])
     assert claimed <= run.plan.surveyed_bytes, (
         f"the plan claims {claimed} bytes of a {run.plan.surveyed_bytes} byte survey"
     )
@@ -112,7 +112,7 @@ def plan_adds_up(run: Pipeline) -> None:
 
 @then("nothing proposed would delete something kept back")
 def nothing_proposed_sweeps_protected(run: Pipeline) -> None:
-    kept = {path for item in run.plan.protected for path in item.paths}
+    kept = {path for item in run.plan.irreplaceable for path in item.paths}
     for item in run.plan.proposals:
         for path in item.paths:
             swept = {

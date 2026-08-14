@@ -45,8 +45,8 @@ def survey(
     A directory the catalog names as reclaimable is counted but not explored:
     enumerating every file in every node_modules on the disk teaches nothing that
     the verdict on the whole has not already said. A directory it names as
-    protected *is* explored, because its contents are the ones somebody may want
-    to look through, override, or find duplicates in.
+    irreplaceable *is* explored, because its contents are the ones somebody may want
+    to look through, pick from, or find duplicates in.
     """
     catalog = load_catalog(home)
 
@@ -56,9 +56,9 @@ def survey(
         A recognised cache's internals teach you nothing the verdict has not
         already said, so walking them is waste. Every other verdict is the
         opposite case. `review` literally means look inside; `irreplaceable`
-        marks contents somebody may still want to see, override, or find
+        marks contents somebody may still want to see, pick from, or find
         duplicates in. Pruning either one is what made "delete the screenshots on
-        my Desktop" answer "those are protected" with no way to proceed.
+        my Desktop" answer "there is nothing there", which is simply false.
         """
         rule = catalog.recognise(path, is_dir=True)
         return rule is not None and rule.verdict is Verdict.REGENERABLE

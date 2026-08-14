@@ -29,7 +29,9 @@
 	let over = $state(false);
 	let timer: ReturnType<typeof setInterval> | undefined;
 
-	const forced = $derived(items.filter((item) => item.overridden).length);
+	const unrecoverable = $derived(
+		items.filter((item) => item.verdict === 'irreplaceable').length
+	);
 
 	function start() {
 		counting = SECONDS;
@@ -104,10 +106,15 @@
 		{/if}
 	</div>
 
-	{#if forced}
+	<!--
+		Said, not asked. Nothing here needs permission — but "3 of these cannot be
+		replaced" is the one fact worth having in front of you the second before
+		you press Empty, whether or not you already knew it.
+	-->
+	{#if unrecoverable}
 		<p class="px-3.5 pb-2 text-[12px]" style="color: var(--irreplaceable)">
 			<span aria-hidden="true">✕</span>
-			{forced} cannot be replaced. Quarantine keeps them until you empty it.
+			{unrecoverable} of these cannot be replaced. Quarantine holds them until you empty it.
 		</p>
 	{/if}
 

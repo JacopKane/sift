@@ -37,7 +37,7 @@
 	let basket = $state<BasketState>({ items: [], total_bytes: 0 });
 	let duplicates = $state<DuplicateReport | null>(null);
 
-	const kept = $derived(plan ? plan.protected.reduce((t, i) => t + i.size_bytes, 0) : 0);
+	const kept = $derived(plan ? plan.irreplaceable.reduce((t, i) => t + i.size_bytes, 0) : 0);
 	const safe = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'regenerable') : []);
 	const undecided = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'review') : []);
 
@@ -59,7 +59,7 @@
 					{
 						verdict: 'irreplaceable',
 						title: 'Kept back',
-						count: plan.protected.length,
+						count: plan.irreplaceable.length,
 						bytes: kept
 					}
 				]
@@ -118,11 +118,7 @@
 
 	async function ask(event: SubmitEvent) {
 		event.preventDefault();
-		await run(prompt, false);
-	}
-
-	async function run(question: string, override: boolean) {
-		if (!question.trim() || !surveyedRoot) return;
+		if (!prompt.trim() || !surveyedRoot) return;
 		asking = true;
 		problem = '';
 		answer = null;
@@ -130,7 +126,7 @@
 			const res = await fetch('/api/ask', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ root: surveyedRoot, prompt: question, override })
+				body: JSON.stringify({ root: surveyedRoot, prompt })
 			});
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.detail ?? 'That did not work.');
@@ -142,21 +138,16 @@
 		}
 	}
 
-	async function addToBasket(path: string, override = false): Promise<void> {
+	// Nothing is refused, so there is nothing to confirm here. The confirmation is
+	// the basket itself: what you picked is listed, coloured by what it costs, and
+	// emptying is a separate press with a countdown you can cancel.
+	async function addToBasket(path: string): Promise<void> {
 		const res = await fetch('/api/basket', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ root: surveyedRoot, path, override })
+			body: JSON.stringify({ root: surveyedRoot, path })
 		});
-		const body = await res.json();
-		if (res.status === 409) {
-			// Not forbidden — not yet insisted upon.
-			if (confirm(`${body.detail}\n\nAdd it anyway? It goes to quarantine, not the bin.`)) {
-				return addToBasket(path, true);
-			}
-			return;
-		}
-		basket = body;
+		basket = await res.json();
 		step = 2;
 	}
 
@@ -320,7 +311,7 @@
 								<span class="tabular" style="color: var(--muted)">{size(file.size_bytes)}</span>
 								<button
 									type="button"
-									onclick={() => addToBasket(file.path, true)}
+									onclick={() => addToBasket(file.path)}
 									class="rounded p-1 transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
 									style="color: var(--muted)"
 									aria-label="Add {file.name} to basket"
@@ -332,22 +323,19 @@
 						{#if answer.selected.length}
 							<button
 								type="button"
-								onclick={() => answer?.selected.forEach((f) => addToBasket(f.path, true))}
+								onclick={() => answer?.selected.forEach((f) => addToBasket(f.path))}
 								class="mt-1.5 flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-[var(--hover)]"
 								style="border-color: var(--edge); color: var(--text)"
 							>
 								<Plus size={13} aria-hidden="true" />
 								Add all {answer.selected.length}
 							</button>
-						{:else if answer.reason.toLowerCase().includes('protect')}
-							<button
-								type="button"
-								onclick={() => run(prompt, true)}
-								class="mt-1 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-[var(--irreplaceable-bg)]"
-								style="border-color: var(--edge-strong); color: var(--irreplaceable)"
-							>
-								I mean it — include protected
-							</button>
+						{/if}
+						{#if answer.irreplaceable.length}
+							<p class="mt-2 text-[12px]" style="color: var(--irreplaceable)">
+								<span aria-hidden="true">✕</span>
+								{answer.irreplaceable.length} of these cannot be replaced.
+							</p>
 						{/if}
 					</Group>
 				{/if}
@@ -378,12 +366,12 @@
 
 					<Group
 						title="Kept back"
-						count={plan.protected.length}
+						count={plan.irreplaceable.length}
 						bytes={kept}
 						token="var(--irreplaceable-solid)"
 						open={false}
 					>
-						{#each plan.protected as item (item.label + item.paths[0])}
+						{#each plan.irreplaceable as item (item.label + item.paths[0])}
 							<Row {item} onBasket={addToBasket} />
 						{/each}
 					</Group>

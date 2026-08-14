@@ -14,7 +14,7 @@ export type PlanItem = {
 
 export type Plan = {
 	proposals: PlanItem[];
-	protected: PlanItem[];
+	irreplaceable: PlanItem[];
 	reclaimable_bytes: number;
 	needs_review_bytes: number;
 	surveyed_bytes: number;
@@ -23,8 +23,7 @@ export type Plan = {
 export type AskResult = {
 	reason: string;
 	selected: { path: string; name: string; size_bytes: number }[];
-	refused: string[];
-	protected: string[];
+	irreplaceable: string[];
 	total_bytes: number;
 };
 
@@ -32,7 +31,6 @@ export type BasketItem = {
 	path: string;
 	size_bytes: number;
 	verdict: Verdict;
-	overridden: boolean;
 };
 
 export type BasketState = {

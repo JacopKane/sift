@@ -32,24 +32,18 @@ class Reclaimed(BaseModel):
     size_bytes: int
     at: str
 
-    overridden: bool = False
-    """True when this was protected and reclaimed anyway. Recorded because the
-    person deserves to see, on the receipt, which of these they forced."""
+    verdict: Verdict | None = None
+    """What it was judged to be at the moment it moved.
+
+    Kept because the manifest is the record of what happened, and a list of paths
+    with no verdicts gives you no way, weeks later, to tell which of them you
+    would be sorry to lose."""
 
 
 class Receipt(BaseModel):
     moved: list[Reclaimed] = Field(default_factory=list)
     freed_bytes: int = 0
     refused: list[str] = Field(default_factory=list)
-
-
-class Protected(Exception):
-    """Raised when something protected is reclaimed without insisting.
-
-    A refusal, not a prohibition. Pass ``override=True`` and it goes: it is the
-    user's disk, and a tool that simply says no is a tool they route around —
-    usually with rm, which has no undo.
-    """
 
 
 class Quarantine:
@@ -74,17 +68,14 @@ class Quarantine:
         *,
         verdict: Verdict | None = None,
         excluding: list[Path] | None = None,
-        override: bool = False,
     ) -> Receipt:
         """Move *path* aside, leaving anything in *excluding* where it is.
 
-        Something marked irreplaceable is refused unless *override* is set. The
-        refusal is the warning; the override is the person overruling it, which
-        they are entitled to do.
+        Nothing is refused. The verdict travels with the move and onto the
+        manifest so the receipt can say what each thing was, but it is not a gate:
+        a tool that says no is a tool people route around, usually with rm, which
+        has no undo. The judgement is there to inform the choice, not to make it.
         """
-        forced = verdict is Verdict.IRREPLACEABLE
-        if forced and not override:
-            raise Protected(f"{path} cannot be replaced if you delete it")
         if not path.exists():
             return Receipt(refused=[f"{path} is not there"])
 
@@ -109,7 +100,7 @@ class Quarantine:
             held_at=held_at,
             size_bytes=_size_of(held_at),
             at=datetime.now(UTC).isoformat(),
-            overridden=forced,
+            verdict=verdict,
         )
         # The slot is already claimed on disk by the move itself, so the manifest
         # is the only thing that needs appending. Re-reading it per item turned a

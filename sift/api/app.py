@@ -23,9 +23,9 @@ from sift.basket import Basket, item_for
 from sift.catalog import load_catalog
 from sift.classify import classify
 from sift.duplicates import find_duplicates
-from sift.models import Classification, Plan, ScanNode
+from sift.models import Classification, Plan, ScanNode, Verdict
 from sift.plan import build_plan
-from sift.quarantine import Protected, Quarantine
+from sift.quarantine import Quarantine
 from sift.scanner import boot_volume_exclusions
 from sift.survey import candidates_for_model, survey
 
@@ -48,13 +48,11 @@ rather than drawn as slivers nobody can click."""
 class Question(BaseModel):
     root: str
     prompt: str
-    override: bool = False
 
 
 class Basketed(BaseModel):
     root: str
     path: str
-    override: bool = False
 
 
 class Dropped(BaseModel):
@@ -106,7 +104,7 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
             raise HTTPException(409, "Survey that folder first, then ask about it.")
 
         try:
-            selection = ask(tree, question.prompt, override=question.override)
+            selection = ask(tree, question.prompt)
         except Exception as failure:
             detail = str(failure)
             if "RESOURCE_EXHAUSTED" in detail or "429" in detail:
@@ -125,19 +123,17 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
         return {
             "reason": selection.reason,
             "selected": chosen,
-            "refused": [str(path) for path in selection.refused],
-            "protected": [str(path) for path in selection.protected],
+            "irreplaceable": [str(path) for path in selection.irreplaceable],
             "total_bytes": sum(cast(int, item["size_bytes"]) for item in chosen),
         }
 
     @app.post("/api/basket")
     def basket_add(request: Basketed) -> dict[str, Any]:
         tree = _surveyed_or_409(surveyed, request.root)
-        try:
-            basket.add(item_for(tree, Path(request.path), overridden=request.override))
-        except Protected as warning:
-            # 409 rather than 403: not forbidden, just not yet insisted upon.
-            raise HTTPException(409, str(warning)) from warning
+        # Nothing is refused. The verdict comes back with the item so the browser
+        # can say what it is; deciding is the person's, and emptying is a separate
+        # act with a countdown behind it.
+        basket.add(item_for(tree, Path(request.path)))
         return _basket_state(basket)
 
     @app.delete("/api/basket")
@@ -152,7 +148,9 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
         return {
             "freed_bytes": receipt.freed_bytes,
             "moved": [str(entry.original) for entry in receipt.moved],
-            "overridden": [str(e.original) for e in receipt.moved if e.overridden],
+            "irreplaceable": [
+                str(e.original) for e in receipt.moved if e.verdict is Verdict.IRREPLACEABLE
+            ],
             "refused": receipt.refused,
         }
 
@@ -200,7 +198,6 @@ def _basket_state(basket: Basket) -> dict[str, Any]:
                 "path": str(item.path),
                 "size_bytes": item.size_bytes,
                 "verdict": item.verdict.value if item.verdict else None,
-                "overridden": item.overridden,
             }
             for item in basket.items
         ],

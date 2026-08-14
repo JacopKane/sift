@@ -29,7 +29,7 @@ Feature: Things that must be true whatever model is answering
     And the plan never accounts for more bytes than the disk holds
 
     # A "loose files in X" item carried the directory's path, so approving it
-    # would have deleted the protected directories beside those files.
+    # would have deleted the irreplaceable directories beside those files.
     And nothing proposed would delete something kept back
 
     # A verdict with no way back withholds the one thing the user needed.

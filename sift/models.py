@@ -129,8 +129,10 @@ class Plan(BaseModel):
     proposals: list[PlanItem]
     """What could be reclaimed, largest first. Never includes anything irreplaceable."""
 
-    protected: list[PlanItem]
-    """Shown so you can see Sift understood your disk, never offered for deletion."""
+    irreplaceable: list[PlanItem]
+    """What nothing can bring back. Never proposed — but listed, not hidden and not
+    locked: seeing that Sift understood your disk is the point, and taking one is
+    your call to make."""
 
     reclaimable_bytes: int
     """Only what is regenerable. Counting `review` here would promise space that

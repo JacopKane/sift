@@ -27,7 +27,7 @@ def build_plan(
         key=lambda item: item.size_bytes,
         reverse=True,
     )
-    protected = sorted(
+    unrecoverable = sorted(
         (item for item in items if item.verdict is Verdict.IRREPLACEABLE),
         key=lambda item: item.size_bytes,
         reverse=True,
@@ -35,7 +35,7 @@ def build_plan(
 
     return Plan(
         proposals=proposals,
-        protected=protected,
+        irreplaceable=unrecoverable,
         reclaimable_bytes=_total(proposals, Verdict.REGENERABLE),
         needs_review_bytes=_total(proposals, Verdict.REVIEW),
         surveyed_bytes=tree.size_bytes,

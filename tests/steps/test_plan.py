@@ -38,7 +38,7 @@ def i_build_a_plan_from_judgements(
 
 @then("the plan accounts for no more than was surveyed")
 def accounts_for_no_more_than_surveyed(plan: Plan) -> None:
-    claimed = sum(item.size_bytes for item in [*plan.proposals, *plan.protected])
+    claimed = sum(item.size_bytes for item in [*plan.proposals, *plan.irreplaceable])
     assert claimed <= plan.surveyed_bytes, (
         f"the plan claims {claimed} bytes of a {plan.surveyed_bytes} byte survey, "
         "so something is counted twice"
@@ -46,12 +46,12 @@ def accounts_for_no_more_than_surveyed(plan: Plan) -> None:
 
 
 @then("nothing proposed contains something kept back")
-def nothing_proposed_contains_protected(plan: Plan) -> None:
-    protected = {path for item in plan.protected for path in item.paths}
+def nothing_proposed_contains_irreplaceable(plan: Plan) -> None:
+    kept_back = {path for item in plan.irreplaceable for path in item.paths}
     for item in plan.proposals:
         for path in item.paths:
             swept_up = {
-                kept for kept in protected if path in kept.parents and kept not in item.excluding
+                kept for kept in kept_back if path in kept.parents and kept not in item.excluding
             }
             assert not swept_up, (
                 f"reclaiming {path} would delete {swept_up}, which the plan says cannot be replaced"
@@ -120,10 +120,10 @@ def not_proposed(plan: Plan, machine: Machine, relpath: str) -> None:
     assert machine.path(relpath) not in proposed
 
 
-@then(parsers.parse('"{relpath}" is listed as protected'))
-def listed_as_protected(plan: Plan, machine: Machine, relpath: str) -> None:
-    protected = {path for item in plan.protected for path in item.paths}
-    assert machine.path(relpath) in protected
+@then(parsers.parse('"{relpath}" is listed as irreplaceable'))
+def listed_as_irreplaceable(plan: Plan, machine: Machine, relpath: str) -> None:
+    kept_back = {path for item in plan.irreplaceable for path in item.paths}
+    assert machine.path(relpath) in kept_back
 
 
 @then("every proposal says how to restore it")
@@ -150,18 +150,18 @@ def review_counted_separately(plan: Plan) -> None:
     assert plan.needs_review_bytes > 0
 
 
-@then("neither total counts anything protected")
-def protected_not_counted(plan: Plan) -> None:
-    protected_bytes = sum(item.size_bytes for item in plan.protected)
-    assert protected_bytes > 0, "the fixture should have something worth protecting"
+@then("neither total counts anything irreplaceable")
+def irreplaceable_not_counted(plan: Plan) -> None:
+    unrecoverable = sum(item.size_bytes for item in plan.irreplaceable)
+    assert unrecoverable > 0, "the fixture should have something that cannot be replaced"
 
     # The three buckets are disjoint, so together they cannot exceed the survey.
-    # If protected bytes leaked into either total this overshoots.
-    counted = plan.reclaimable_bytes + plan.needs_review_bytes + protected_bytes
+    # If irreplaceable bytes leaked into either total this overshoots.
+    counted = plan.reclaimable_bytes + plan.needs_review_bytes + unrecoverable
     assert counted <= plan.surveyed_bytes
 
     proposed_paths = {path for item in plan.proposals for path in item.paths}
-    protected_paths = {path for item in plan.protected for path in item.paths}
+    protected_paths = {path for item in plan.irreplaceable for path in item.paths}
     assert not (proposed_paths & protected_paths)
 
 

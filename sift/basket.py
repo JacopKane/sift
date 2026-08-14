@@ -2,7 +2,10 @@
 
 The plan proposes; the basket is where the decision is recorded. It exists as its
 own thing because putting something in and emptying it are separate acts — that
-gap is where the warning lives, and where a countdown can be cancelled.
+gap is the confirmation, and where a countdown can be cancelled.
+
+Nothing is refused entry. Each item carries the verdict the survey gave it, so
+what is about to happen is legible right up to the moment it does.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from sift.models import ScanNode, Verdict
-from sift.quarantine import Protected, Quarantine, Receipt
+from sift.quarantine import Quarantine, Receipt
 
 
 class Item(BaseModel):
@@ -20,8 +23,6 @@ class Item(BaseModel):
     size_bytes: int
     verdict: Verdict | None = None
     excluding: list[Path] = Field(default_factory=list)
-    overridden: bool = False
-    """Set when the person was warned this cannot be replaced and said go ahead."""
 
 
 class Basket:
@@ -37,9 +38,7 @@ class Basket:
         return sum(item.size_bytes for item in self._items.values())
 
     def add(self, item: Item) -> None:
-        """Take one in, refusing anything protected that has not been insisted on."""
-        if item.verdict is Verdict.IRREPLACEABLE and not item.overridden:
-            raise Protected(f"{item.path} cannot be replaced if you delete it")
+        """Take one in. Anything the survey judged can go in, whatever it judged."""
         self._items[item.path] = item
 
     def remove(self, path: Path) -> None:
@@ -63,9 +62,8 @@ class Basket:
                     item.path,
                     verdict=item.verdict,
                     excluding=item.excluding,
-                    override=item.overridden,
                 )
-            except (Protected, OSError) as failure:
+            except OSError as failure:
                 refused.append(f"{item.path}: {failure}")
                 continue
             moved.extend(outcome.moved)
@@ -76,30 +74,24 @@ class Basket:
         return Receipt(moved=moved, freed_bytes=freed, refused=refused)
 
 
-def item_for(tree: ScanNode, path: Path, *, overridden: bool = False) -> Item:
+def item_for(tree: ScanNode, path: Path) -> Item:
     """Build a basket item from what the survey already knows about *path*.
 
-    Protection is inherited. A screenshot inside ~/Desktop carries no verdict of
-    its own — the catalog names directories, not files — so reading only the
-    node's own verdict let every file inside a protected folder be basketed and
-    reclaimed with no warning at all. The nearest verdict above it is the answer.
+    The verdict is inherited. A key inside ~/.ssh carries no verdict of its own —
+    the catalog names directories, not files — so reading only the node's own
+    verdict put every file inside an irreplaceable folder into the basket
+    unlabelled, looking exactly like a build cache.
     """
-    inherited: Verdict | None = None
     stack: list[tuple[ScanNode, Verdict | None]] = [(tree, tree.verdict)]
 
     while stack:
         node, above = stack.pop()
         if node.path == path:
-            return Item(
-                path=path,
-                size_bytes=node.size_bytes,
-                verdict=node.verdict or above,
-                overridden=overridden,
-            )
+            return Item(path=path, size_bytes=node.size_bytes, verdict=node.verdict or above)
         # Only irreplaceable is inherited: "this cache rebuilds itself" says
-        # nothing about a particular file inside it, but "never delete this" does.
+        # nothing about a particular file inside it, but "this cannot be replaced"
+        # does.
         carried = node.verdict if node.verdict is Verdict.IRREPLACEABLE else above
         stack.extend((child, carried) for child in node.children)
 
-    _ = inherited
     raise KeyError(f"{path} was not in the survey")

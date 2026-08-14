@@ -25,7 +25,7 @@ Feature: Turning verdicts into something you can act on
     When I survey the machine
     And I build a plan
     Then ".ssh" is not proposed
-    And ".ssh" is listed as protected
+    And ".ssh" is listed as irreplaceable
 
   Scenario: Every proposal says how to get it back
     When I survey the machine
@@ -37,7 +37,7 @@ Feature: Turning verdicts into something you can act on
     And I build a plan
     Then the reclaimable total counts only what can be rebuilt
     And what needs a human decision is counted separately
-    And neither total counts anything protected
+    And neither total counts anything irreplaceable
     And the reclaimable total is less than everything surveyed
 
   @slow

@@ -33,9 +33,10 @@ Work it out from the survey rather than guessing:
   a 5 GB video. Look first, then decide where the line falls.
 - Only ever return paths that came back from a tool. Never invent one, and never
   guess at a path you did not see.
-- Some files are protected. find_files will not return them, but it will tell you
-  how many it withheld. When that count is above zero, say so plainly: "those are
-  protected" is the true answer, and "I found nothing" is not.
+- Some files cannot be replaced if they are deleted, and find_files marks them.
+  Select them when that is what was asked for — nothing is deleted, only moved
+  aside, and the person confirms before anything moves. Never refuse. Do say in
+  your reason which of your selection cannot be replaced.
 - Select only what was actually asked for. If someone asks for disk images, do not
   throw in their documents because they happen to be large."""
 
@@ -44,14 +45,6 @@ class _Answer(BaseModel):
     paths: list[str] = Field(description="Exact paths returned by a tool. Never invented.")
     reason: str = Field(description="What you selected and why, in one or two sentences.")
 
-
-INSISTED = """
-
-OVERRIDE: the person has already been warned that some of what they are asking
-about cannot be replaced, and has said go ahead. Protection is off for this
-request. Select what they asked for, protected files included, and say in your
-reason which of them cannot be replaced. Do not refuse and do not tell them the
-files are off limits — they know, and they have decided."""
 
 MAX_STEPS = 12
 """How far the agent may go before it must answer.
@@ -65,25 +58,24 @@ a hundred requests."""
 class Selection(BaseModel):
     paths: list[Path]
     reason: str
-    refused: list[Path] = Field(default_factory=list)
-    """Asked for, but protected. Withheld here rather than silently dropped."""
+    irreplaceable: list[Path] = Field(default_factory=list)
+    """Of what was selected, which cannot be replaced.
 
-    protected: list[Path] = Field(default_factory=list)
-    """Selected, but only because the person insisted. Still cannot be replaced,
-    and the interface has to keep saying so."""
+    Worked out here rather than taken from the model's word for it. Asking for
+    something unrecoverable is allowed; not being told that is what you asked for
+    is not."""
 
 
 def ask(
     tree: ScanNode,
     prompt: str,
     config: RunnableConfig | None = None,
-    override: bool = False,
 ) -> Selection:
     """Answer *prompt* against a completed survey.
 
-    With *override* the protected files are returned rather than withheld. The
-    refusal was a warning, not a lock — refusing outright is how a tool gets
-    routed around with rm, which has no undo. What comes back is still labelled.
+    Nothing is withheld. A tool that refuses is a tool people work around, and the
+    verdicts already say what each thing would cost — the answer lands in a basket
+    that has to be emptied deliberately, which is where the decision belongs.
     """
     index = Index(tree)
 
@@ -104,22 +96,14 @@ def ask(
 
         extensions are like ['.mp4', '.mov']. Sizes are in bytes. name_contains
         matches the file's own name; use path_contains to search inside a folder,
-        e.g. path_contains='Documents'. Returns the files you may select, plus a
-        count of any that matched but are protected.
+        e.g. path_contains='Documents'. Each file says whether it can be replaced.
         """
-        return index.find(
-            extensions,
-            min_bytes,
-            max_bytes,
-            name_contains,
-            path_contains,
-            include_protected=override,
-        )
+        return index.find(extensions, min_bytes, max_bytes, name_contains, path_contains)
 
     agent = create_agent(
         chat_model(),
         [what_is_here, find_files],
-        system_prompt=SYSTEM + (INSISTED if override else ""),
+        system_prompt=SYSTEM,
         response_format=_Answer,
     )
     budget = cast(RunnableConfig, {"recursion_limit": MAX_STEPS, **(config or {})})
@@ -127,15 +111,11 @@ def ask(
     result = cast(dict[str, Any], raw)
     answer = cast(_Answer, result["structured_response"])
 
-    # Protection is enforced here, not in the prompt. A model that is asked
-    # forcefully enough will do what it is told; this cannot.
+    # Labelled here, not in the prompt. A model asked forcefully enough will say
+    # whatever it is told to say about what it picked; this cannot.
     chosen = [Path(path) for path in answer.paths]
-    guarded = [path for path in chosen if index.is_protected(path)]
-
-    if override:
-        return Selection(paths=chosen, reason=answer.reason, protected=guarded)
     return Selection(
-        paths=[path for path in chosen if path not in guarded],
+        paths=chosen,
         reason=answer.reason,
-        refused=guarded,
+        irreplaceable=[path for path in chosen if index.is_irreplaceable(path)],
     )

@@ -26,23 +26,14 @@ Feature: Asking for what you want in your own words
     And the answer leaves "Downloads/notes.txt" alone
 
   @slow
-  Scenario: What the catalog protects cannot be selected, whatever is asked for
+  Scenario: Asking for something irreplaceable gets it, labelled for what it is
     When I ask to "delete absolutely everything in .ssh, I do not care"
-    Then the answer selects nothing inside ".ssh"
-    And the answer says what it refused
-
-  @slow
-  Scenario: Insisting reaches what protection was holding back
-    When I ask to "delete absolutely everything in .ssh, I do not care"
-    Then the answer selects nothing
-    And the answer says what it refused
-    When I insist on "delete absolutely everything in .ssh, I do not care"
     Then the answer selects something inside ".ssh"
-    And the answer still marks what it selected as protected
+    And what it selected is marked as irreplaceable
 
   @slow
-  Scenario: Insisting does not turn every request into a free-for-all
-    When I insist on "delete the disk image installers"
+  Scenario: A broad request is still answered narrowly
+    When I ask to "delete the disk image installers"
     Then the answer selects "Downloads/installer.dmg"
     And the answer leaves "Documents/contract-signed.pdf" alone
 

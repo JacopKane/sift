@@ -32,13 +32,13 @@ Feature: Recognising what a directory is
     And "Library/Caches" is regenerable
     And ".npm/_cacache" is regenerable
 
-  Scenario: Source next to its manifest is protected by rule, never by judgement
+  Scenario: Source next to its manifest is settled by rule, never by judgement
     When I survey the machine
     Then "Sites/client-app/src" is irreplaceable
     And "Sites/old-project/src" is irreplaceable
     And "Sites/client-app/src" is never proposed for deletion
 
-  Scenario: Credentials are protected for what they are, not where they sit
+  Scenario: Credentials are judged for what they are, not where they sit
     When I survey the machine
     Then ".ssh" is irreplaceable
     And ".ssh" is never proposed for deletion

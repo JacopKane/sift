@@ -51,14 +51,6 @@ def browser_baskets(client: TestClient, machine: Machine, relpath: str) -> Any:
     )
 
 
-@when(parsers.parse('the browser insists on basketing "{relpath}"'), target_fixture="reply")
-def browser_insists(client: TestClient, machine: Machine, relpath: str) -> Any:
-    return client.post(
-        "/api/basket",
-        json={"root": str(machine.root), "path": str(machine.path(relpath)), "override": True},
-    )
-
-
 @when("the browser empties the basket", target_fixture="emptied")
 def browser_empties(client: TestClient, machine: Machine) -> dict[str, Any]:
     response = client.post("/api/basket/empty", params={"root": str(machine.root)})
@@ -104,15 +96,13 @@ def browser_can_undo(client: TestClient, machine: Machine) -> None:
     assert machine.path("Sites/client-app/node_modules").exists()
 
 
-@then("it is refused with a warning")
-def refused_with_warning(reply: Any) -> None:
-    assert reply.status_code == 409, reply.text
-    assert "cannot be replaced" in reply.json()["detail"]
-
-
-@then("the response says it was overridden")
-def response_says_overridden(emptied: dict[str, Any]) -> None:
-    assert emptied["overridden"], "forcing a protected delete must be visible afterwards"
+@then("the basket says it cannot be replaced")
+def basket_says_cannot_be_replaced(reply: Any) -> None:
+    assert reply.status_code == 200, reply.text
+    verdicts = [item["verdict"] for item in reply.json()["items"]]
+    assert "irreplaceable" in verdicts, (
+        f"it went in unlabelled: {verdicts} — the browser has nothing to colour it with"
+    )
 
 
 @then(parsers.parse("it is told about a set of {count:d} identical files"))

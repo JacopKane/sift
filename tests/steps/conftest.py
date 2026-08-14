@@ -15,7 +15,7 @@ from pytest_bdd import given, parsers, then, when
 from sift.classify import classify
 from sift.config import settings
 from sift.models import Classification, ScanNode, Verdict
-from sift.quarantine import Protected, Quarantine, Receipt
+from sift.quarantine import Quarantine, Receipt
 from sift.survey import candidates_for_model, survey
 from tests import machine as machine_module
 from tests.machine import Machine
@@ -166,26 +166,20 @@ def i_reclaim_excluding(
     return held.reclaim(machine.path(relpath), excluding=[machine.path(kept)])
 
 
-@when(parsers.parse('I try to reclaim "{relpath}"'), target_fixture="refusal")
-def i_try_to_reclaim(
-    held: Quarantine, machine: Machine, surveyed: ScanNode, relpath: str
-) -> Exception | None:
-    target = machine.path(relpath)
-    try:
-        held.reclaim(target, verdict=_verdict_for(surveyed, target))
-    except Protected as refused:
-        return refused
-    return None
-
-
 @when("I undo", target_fixture="undone")
 def i_undo(held: Quarantine) -> Receipt:
     return held.undo()
 
 
-@then("it refuses")
-def it_refuses(refusal: Exception | None) -> None:
-    assert isinstance(refusal, Protected)
+@then(parsers.parse('the manifest records "{relpath}" as irreplaceable'))
+def manifest_records_verdict(held: Quarantine, machine: Machine, relpath: str) -> None:
+    target = machine.path(relpath)
+    entries = [entry for entry in held.held() if entry.original == target]
+    assert entries, f"{relpath} is not in the manifest"
+    assert all(entry.verdict is Verdict.IRREPLACEABLE for entry in entries), (
+        "the manifest is the record of what happened; it has to say what each "
+        "thing was judged to be at the moment it moved"
+    )
 
 
 @then(parsers.parse('"{relpath}" is gone from where it was'))

@@ -16,14 +16,20 @@ from sift.models import ScanNode, Verdict
 class Index:
     def __init__(self, tree: ScanNode) -> None:
         self._files = [node for node in _walk(tree) if not node.is_dir]
-        self._protected = frozenset(
+        self._irreplaceable = frozenset(
             node.path for node in _walk(tree) if node.verdict is Verdict.IRREPLACEABLE
         )
         self.total_bytes = tree.size_bytes
 
-    def is_protected(self, path: Path) -> bool:
-        """True when the catalog has declared this off limits, at any depth above."""
-        return path in self._protected or any(parent in self._protected for parent in path.parents)
+    def is_irreplaceable(self, path: Path) -> bool:
+        """True when the survey judged this unrecoverable, at any depth above.
+
+        A label, not a lock. Nothing consults this to decide whether a file may be
+        returned — only to say what it is.
+        """
+        return path in self._irreplaceable or any(
+            parent in self._irreplaceable for parent in path.parents
+        )
 
     def find(
         self,
@@ -33,13 +39,13 @@ class Index:
         name_contains: str | None = None,
         path_contains: str | None = None,
         limit: int = 60,
-        include_protected: bool = False,
     ) -> dict[str, object]:
-        """Matching files, with protected ones counted rather than silently dropped.
+        """Matching files, largest first, each labelled with what it would cost.
 
-        Dropping them quietly makes the agent report "I found nothing", which reads
-        as "that isn't there" when the truth is "that is off limits" — a different
-        answer, and the one the person asking actually needs.
+        Everything that matches comes back. Withholding files made the agent report
+        "I found nothing", which reads as "that isn't there" when the truth was
+        "that is off limits" — and it is not the tool's place to decide either way.
+        Saying which files cannot be replaced is.
         """
         wanted = {e.lower() if e.startswith(".") else f".{e.lower()}" for e in extensions or []}
 
@@ -55,34 +61,22 @@ class Index:
             # matches nothing, and reports "there is no such folder" — which is false.
             and (path_contains is None or path_contains.lower() in str(node.path).lower())
         ]
-        # When the person has insisted, protection stops being a filter and becomes
-        # a label. They still see which of these cannot be replaced.
-        allowed = (
-            list(matched)
-            if include_protected
-            else [node for node in matched if not self.is_protected(node.path)]
-        )
-        withheld = len(matched) - len(allowed)
-        allowed.sort(key=lambda node: node.size_bytes, reverse=True)
-
-        # A protected directory is counted but never explored, so none of its files
-        # are in the index. Without this a query aimed at one comes back empty and
-        # the honest-sounding answer is "there is nothing there" — when the truth
-        # is "that is off limits". Naming the directory closes that gap.
-        aimed_at = sorted(
-            str(path)
-            for path in self._protected
-            if path_contains and path_contains.lower() in str(path).lower()
-        )
+        matched.sort(key=lambda node: node.size_bytes, reverse=True)
+        shown = matched[:limit]
+        unrecoverable = sum(1 for node in shown if self.is_irreplaceable(node.path))
 
         return {
             "files": [
-                {"path": str(node.path), "name": node.name, "size_bytes": node.size_bytes}
-                for node in allowed[:limit]
+                {
+                    "path": str(node.path),
+                    "name": node.name,
+                    "size_bytes": node.size_bytes,
+                    "irreplaceable": self.is_irreplaceable(node.path),
+                }
+                for node in shown
             ],
-            "withheld_because_protected": withheld,
-            "protected_directories_matched": aimed_at,
-            "note": _note(aimed_at, withheld, include_protected),
+            "irreplaceable_count": unrecoverable,
+            "note": _note(unrecoverable),
         }
 
     def summary(self) -> dict[str, object]:
@@ -104,24 +98,14 @@ class Index:
         }
 
 
-def _note(directories: list[str], files: int, overridden: bool = False) -> str:
-    """What to tell the model about anything it matched but may not have."""
-    if overridden:
-        # The person has already been warned and said go ahead. Repeating the
-        # warning here is how the agent talks itself back out of doing as asked.
-        return (
-            "The person has overridden protection for this request. Protected files "
-            "ARE included above and you may select them. Note in your reason that "
-            "they cannot be replaced."
-        )
-    off_limits = [*directories]
-    if files:
-        off_limits.append(f"{files} file(s)")
-    if not off_limits:
+def _note(unrecoverable: int) -> str:
+    """What to tell the model about what it just matched."""
+    if not unrecoverable:
         return ""
     return (
-        f"Protected and off limits: {', '.join(off_limits)}. Say they are protected. "
-        "Do not say nothing was found — that is a different answer, and it is not true."
+        f"{unrecoverable} of these cannot be replaced if deleted. You may still select "
+        "them if that is what was asked for — it is the person's disk and nothing is "
+        "deleted, only moved aside. Say in your reason which ones they are."
     )
 
 

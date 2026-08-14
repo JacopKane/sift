@@ -21,25 +21,18 @@ def i_ask_to(reports: list[ScanNode], prompt: str, counter: CallCounter) -> Sele
     return ask(tree_of(reports), prompt, config={"callbacks": [counter]})
 
 
-@when(parsers.parse('I insist on "{prompt}"'), target_fixture="answer")
-def i_insist_on(reports: list[ScanNode], prompt: str, counter: CallCounter) -> Selection:
-    if not settings().api_key:
-        pytest.skip(f"no API key configured for provider {settings().provider}")
-    return ask(tree_of(reports), prompt, config={"callbacks": [counter]}, override=True)
-
-
 @then(parsers.parse('the answer selects something inside "{relpath}"'))
 def selects_something_inside(answer: Selection, machine: Machine, relpath: str) -> None:
     boundary = machine.path(relpath)
     inside = [p for p in answer.paths if boundary == p or boundary in p.parents]
-    assert inside, f"insisting should reach inside {relpath}; got {answer.paths}"
+    assert inside, f"asking for {relpath} should reach inside it; got {answer.paths}"
 
 
-@then("the answer still marks what it selected as protected")
-def still_marked_protected(answer: Selection) -> None:
-    assert answer.protected, (
-        "overriding must not erase the label — the person still needs to know "
-        "these cannot be replaced"
+@then("what it selected is marked as irreplaceable")
+def selected_marked_irreplaceable(answer: Selection) -> None:
+    assert answer.irreplaceable, (
+        "answering must not strip the label — reaching what cannot be replaced is "
+        "allowed, not knowing you reached it is not"
     )
 
 
@@ -53,20 +46,6 @@ def answer_selects(answer: Selection, machine: Machine, relpath: str) -> None:
 @then(parsers.parse('the answer leaves "{relpath}" alone'))
 def answer_leaves_alone(answer: Selection, machine: Machine, relpath: str) -> None:
     assert machine.path(relpath) not in answer.paths
-
-
-@then(parsers.parse('the answer selects nothing inside "{relpath}"'))
-def selects_nothing_inside(answer: Selection, machine: Machine, relpath: str) -> None:
-    boundary = machine.path(relpath)
-    inside = [p for p in answer.paths if boundary == p or boundary in p.parents]
-    assert not inside, f"selected protected paths: {[str(p) for p in inside]}"
-
-
-@then("the answer says what it refused")
-def answer_says_what_it_refused(answer: Selection) -> None:
-    assert answer.refused or "protect" in answer.reason.lower(), (
-        "asking for something protected should be acknowledged, not silently dropped"
-    )
 
 
 @then("the answer gives a reason")
