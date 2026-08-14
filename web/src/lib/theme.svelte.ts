@@ -15,7 +15,9 @@ function resolve(theme: Theme): 'light' | 'dark' {
 }
 
 function apply(theme: Theme) {
-	document.documentElement.classList.toggle('dark', resolve(theme) === 'dark');
+	const dark = resolve(theme) === 'dark';
+	document.documentElement.classList.toggle('dark', dark);
+	document.documentElement.classList.toggle('light', !dark);
 	document.documentElement.style.colorScheme = resolve(theme);
 }
 

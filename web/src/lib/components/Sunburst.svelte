@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { size, tokenFor, describe, type Verdict } from '$lib/format';
+	import { size, tokenFor, solidFor, describe, type Verdict } from '$lib/format';
 
 	export type ChartNode = {
 		name: string;
@@ -11,13 +11,13 @@
 		children: ChartNode[];
 	};
 
-	let { tree }: { tree: ChartNode | null } = $props();
+	let { tree, root }: { tree: ChartNode | null; root?: string | null } = $props();
 
 	type Arc = { node: ChartNode; depth: number; d: string };
 
 	const CENTRE = 230;
-	const INNER = 62;
-	const RING = 38;
+	const INNER = 60;
+	const RING = 36;
 	const GAP = 3;
 
 	function sweep(cx: number, cy: number, r0: number, r1: number, a0: number, a1: number) {
@@ -33,7 +33,6 @@
 	const arcs = $derived.by(() => {
 		if (!tree) return [] as Arc[];
 		const out: Arc[] = [];
-
 		const place = (node: ChartNode, depth: number, a0: number, a1: number) => {
 			if (depth > 0 && a1 - a0 > 0.004) {
 				const r0 = INNER + (depth - 1) * (RING + GAP);
@@ -50,26 +49,34 @@
 				a += width;
 			}
 		};
-
 		place(tree, 0, -Math.PI / 2, Math.PI * 1.5);
 		return out;
 	});
 
+	// Crop to the rings that were actually drawn. A shallow tree in a box sized for
+	// the deepest possible one is a small donut adrift in dead space.
+	const depth = $derived(arcs.reduce((deepest, arc) => Math.max(deepest, arc.depth), 0));
+	const radius = $derived(INNER + Math.max(depth, 1) * (RING + GAP));
+	const box = $derived(
+		`${CENTRE - radius} ${CENTRE - radius} ${radius * 2} ${radius * 2}`
+	);
+
 	let hovered = $state<ChartNode | null>(null);
+	const shown = $derived(hovered ?? tree);
 </script>
 
-<div class="w-full">
+<div class="flex min-h-0 flex-col">
 	<svg
-		viewBox="0 0 460 460"
-		class="mx-auto block h-auto w-full max-w-[min(430px,100%)]"
+		viewBox={box}
+		class="mx-auto block h-auto w-full max-w-[290px] shrink-0"
 		role="img"
 		aria-label="Files and folders by size, coloured by what recovery would cost"
 	>
 		{#each arcs as arc (arc.node.path + arc.depth)}
 			<path
 				d={arc.d}
-				fill={tokenFor(arc.node.verdict)}
-				fill-opacity={arc.node.verdict ? 0.9 : 0.45}
+				fill={solidFor(arc.node.verdict)}
+				fill-opacity={arc.node.verdict ? 1 - (arc.depth - 1) * 0.07 : 0.45}
 				stroke="var(--ground)"
 				stroke-width="1"
 				tabindex="0"
@@ -82,28 +89,21 @@
 				onblur={() => (hovered = null)}
 			/>
 		{/each}
-		{#if tree}
-			<text
-				x={CENTRE}
-				y={CENTRE + 6}
-				text-anchor="middle"
-				fill="var(--text)"
-				style="font-family: var(--font-mono); font-size: 22px"
-			>
-				{size(tree.size_bytes)}
-			</text>
-		{/if}
 	</svg>
 
-	<p
-		class="mt-2 min-h-[2.5rem] font-mono text-xs break-all"
-		style="color: var(--muted)"
-		aria-live="polite"
-	>
-		{#if hovered}
-			<span style="color: var(--text)">{size(hovered.size_bytes)}</span>
-			{hovered.path}
-			{#if hovered.verdict}· {describe(hovered.verdict)}{/if}
+	<!--
+		Fixed height, always occupied. Growing a readout on hover pushes everything
+		below it, so pointing at the map rearranges the page you are pointing at.
+	-->
+	<div class="mt-3 h-[3.4rem] shrink-0 px-0.5" aria-live="polite">
+		{#if shown}
+			<p class="display">{size(shown.size_bytes)}</p>
+			<p class="meta mt-0.5 truncate" title={shown.path}>
+				{hovered ? shown.path : (root ?? shown.name)}
+			</p>
+			<p class="text-[11px] leading-tight" style="color: {tokenFor(hovered?.verdict ?? null)}">
+				{hovered ? describe(hovered.verdict) : ''}
+			</p>
 		{/if}
-	</p>
+	</div>
 </div>

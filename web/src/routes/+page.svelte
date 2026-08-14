@@ -13,7 +13,9 @@
 	import Row from '$lib/components/Row.svelte';
 	import BasketDock from '$lib/components/BasketDock.svelte';
 	import DuplicateStack from '$lib/components/DuplicateStack.svelte';
-	import { size, VERDICT } from '$lib/format';
+	import Legend from '$lib/components/Legend.svelte';
+	import Totals, { type Total } from '$lib/components/Totals.svelte';
+	import { size } from '$lib/format';
 	import type { Plan, AskResult, BasketState, DuplicateReport } from '$lib/types';
 
 	const STEPS = ['Choose', 'Review', 'Reclaim'];
@@ -37,6 +39,31 @@
 	const kept = $derived(plan ? plan.protected.reduce((t, i) => t + i.size_bytes, 0) : 0);
 	const safe = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'regenerable') : []);
 	const undecided = $derived(plan ? plan.proposals.filter((i) => i.verdict === 'review') : []);
+
+	const totals = $derived<Total[]>(
+		plan
+			? [
+					{
+						verdict: 'regenerable',
+						title: 'Safe to reclaim',
+						count: safe.length,
+						bytes: plan.reclaimable_bytes
+					},
+					{
+						verdict: 'review',
+						title: 'Needs a decision',
+						count: undecided.length,
+						bytes: plan.needs_review_bytes
+					},
+					{
+						verdict: 'irreplaceable',
+						title: 'Kept back',
+						count: plan.protected.length,
+						bytes: kept
+					}
+				]
+			: []
+	);
 
 	function survey(where: string) {
 		step = 1;
@@ -166,9 +193,12 @@
 	}
 </script>
 
-<!-- The page never scrolls. Each region scrolls itself, so no group is ever
-     hidden behind another one's length. -->
-<div class="flex h-screen flex-col overflow-hidden">
+<!--
+	`dvh`, not `vh`: on iOS the address bar is part of `vh`, so a full-height app
+	is always a little taller than the window and always scrolls by that much.
+	Below the header there is exactly one scrolling region per column.
+-->
+<div class="flex h-dvh flex-col overflow-hidden">
 	<header
 		class="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2.5 sm:px-5"
 		style="border-color: var(--edge)"
@@ -181,7 +211,7 @@
 			<button
 				type="button"
 				onclick={restart}
-				class="rounded-md border p-1.5"
+				class="rounded-md border p-1.5 transition-colors hover:bg-[var(--raised)]"
 				style="border-color: var(--edge); color: var(--muted)"
 				aria-label="Choose another folder"
 				title="Choose another folder"
@@ -195,7 +225,7 @@
 		<span class="flex-1"></span>
 
 		{#if status}
-			<span class="font-mono text-xs" style="color: var(--muted)" role="status">{status}</span>
+			<span class="meta tabular" role="status">{status}</span>
 		{/if}
 		<ThemeToggle />
 	</header>
@@ -207,24 +237,27 @@
 			id="main"
 			class="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[340px_minmax(0,1fr)_290px]"
 		>
-			<section class="hidden min-h-0 flex-col lg:flex" aria-label="Disk map">
-				<Sunburst tree={chart} />
-				<ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style="color: var(--muted)">
-					{#each Object.entries(VERDICT) as [key, meta] (key)}
-						<li class="flex items-center gap-1">
-							<span class="size-2 rounded-full" style="background: {meta.token}"></span>
-							<span aria-hidden="true">{meta.glyph}</span>
-							{meta.label}
-						</li>
-					{/each}
-				</ul>
+			<section class="scroller hidden min-h-0 flex-col gap-4 pr-1 lg:flex" aria-label="Disk map">
+				<Sunburst tree={chart} root={surveyedRoot} />
+
+				{#if plan}
+					<div>
+						<h2 class="label mb-1">Breakdown</h2>
+						<Totals rows={totals} />
+					</div>
+				{/if}
+
+				<div>
+					<h2 class="label">Colour</h2>
+					<Legend />
+				</div>
 			</section>
 
-			<section class="flex min-h-0 flex-col gap-3 overflow-y-auto" aria-label="What was found">
+			<section class="scroller flex min-h-0 flex-col gap-3 pr-1" aria-label="What was found">
 				{#if problem}
 					<p
-						class="rounded-lg border px-3.5 py-2.5 text-[13px]"
-						style="border-color: var(--review); color: var(--text)"
+						class="shrink-0 rounded-lg border px-3.5 py-2.5 text-[13px]"
+						style="border-color: var(--review); background: var(--review-bg); color: var(--text)"
 						role="alert"
 					>
 						{problem}
@@ -245,16 +278,16 @@
 								id="prompt"
 								bind:value={prompt}
 								placeholder="delete the screenshots…"
-								class="w-full rounded-lg border py-2 pr-3 pl-8 text-[13px]"
+								class="w-full rounded-lg border py-2 pr-3 pl-8 text-[13px] transition-colors"
 								style="background: var(--surface); border-color: var(--edge); color: var(--text)"
 							/>
 						</div>
 						<button
 							type="submit"
 							disabled={asking}
-							class="rounded-lg border p-2 disabled:opacity-40"
+							class="rounded-lg border p-2 transition-colors hover:bg-[var(--raised)] disabled:opacity-40"
 							style="border-color: var(--edge); color: var(--text)"
-							aria-label="Ask"
+							aria-label={asking ? 'Thinking' : 'Ask'}
 						>
 							<Search size={16} aria-hidden="true" />
 						</button>
@@ -266,17 +299,20 @@
 						title="Answer"
 						count={answer.selected.length}
 						bytes={answer.total_bytes}
-						token="var(--review)"
+						token="var(--review-solid)"
+						list={false}
 					>
 						<p class="mb-2 text-[12.5px]" style="color: var(--muted)">{answer.reason}</p>
 						{#each answer.selected as file (file.path)}
-							<div class="flex items-center gap-2 px-2 py-1 text-[13px]">
+							<div
+								class="flex items-center gap-2 rounded-md px-2 py-1 text-[13px] transition-colors hover:bg-[var(--raised)]"
+							>
 								<span class="min-w-0 flex-1 truncate" title={file.path}>{file.name}</span>
-								<span class="font-mono" style="color: var(--muted)">{size(file.size_bytes)}</span>
+								<span class="tabular" style="color: var(--muted)">{size(file.size_bytes)}</span>
 								<button
 									type="button"
 									onclick={() => addToBasket(file.path, true)}
-									class="rounded p-1"
+									class="rounded p-1 transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
 									style="color: var(--muted)"
 									aria-label="Add {file.name} to basket"
 								>
@@ -288,7 +324,7 @@
 							<button
 								type="button"
 								onclick={() => answer?.selected.forEach((f) => addToBasket(f.path, true))}
-								class="mt-1.5 flex items-center gap-1.5 rounded border px-2 py-1 text-xs"
+								class="mt-1.5 flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-[var(--hover)]"
 								style="border-color: var(--edge); color: var(--text)"
 							>
 								<Plus size={13} aria-hidden="true" />
@@ -298,8 +334,8 @@
 							<button
 								type="button"
 								onclick={() => run(prompt, true)}
-								class="mt-1 rounded border px-2 py-1 text-xs"
-								style="border-color: var(--irreplaceable); color: var(--irreplaceable)"
+								class="mt-1 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-[var(--irreplaceable-bg)]"
+								style="border-color: var(--edge-strong); color: var(--irreplaceable)"
 							>
 								I mean it — include protected
 							</button>
@@ -312,7 +348,7 @@
 						title="Safe to reclaim"
 						count={safe.length}
 						bytes={plan.reclaimable_bytes}
-						token="var(--regenerable)"
+						token="var(--regenerable-solid)"
 					>
 						{#each safe as item (item.label + item.paths[0])}
 							<Row {item} onBasket={addToBasket} />
@@ -323,7 +359,7 @@
 						title="Needs a decision"
 						count={undecided.length}
 						bytes={plan.needs_review_bytes}
-						token="var(--review)"
+						token="var(--review-solid)"
 						open={false}
 					>
 						{#each undecided as item (item.label + item.paths[0])}
@@ -335,7 +371,7 @@
 						title="Kept back"
 						count={plan.protected.length}
 						bytes={kept}
-						token="var(--irreplaceable)"
+						token="var(--irreplaceable-solid)"
 						open={false}
 					>
 						{#each plan.protected as item (item.label + item.paths[0])}
@@ -349,7 +385,7 @@
 								title="The same file twice"
 								count={duplicates.sets.length}
 								bytes={duplicates.reclaimable_bytes}
-								token="var(--review)"
+								token="var(--review-solid)"
 								open={false}
 							>
 								{#each duplicates.sets as found (found.keep)}
@@ -360,7 +396,7 @@
 							<button
 								type="button"
 								onclick={loadDuplicates}
-								class="flex shrink-0 items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-[13px]"
+								class="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-[13px] transition-colors hover:bg-[var(--raised)] hover:text-[var(--text)]"
 								style="border-color: var(--edge); color: var(--muted)"
 							>
 								<Copy size={15} aria-hidden="true" />

@@ -55,7 +55,7 @@ Colour is never the only signal — each verdict has its own glyph and its own w
 ## Safety
 
 - **Nothing is deleted.** Reclaiming *moves* to quarantine with a manifest. Emptying it is your separate, deliberate act.
-- **Protected by rule, not by guess.** `~/Documents`, `~/Desktop`, `~/Pictures`, `~/.ssh`, and any `src/` beside a manifest.
+- **Protected by kind, not by location.** `~/.ssh`, `~/.gnupg`, `~/Library/Keychains`, and any `src/` beside a manifest. Your Desktop is where you work, not a vault — it needs a decision, not a lock.
 - **Warnings, not locks.** You can override any of it — it's your disk. The override is recorded on the receipt.
 - **Your files stay put.** Names, sizes and extensions go to the model. File contents never leave your machine.
 
@@ -89,7 +89,7 @@ uv sync && uv run sift
 ```
 
 ```bash
-.venv/bin/pytest -m "not slow"   # 60 scenarios, ~3s, no network
+.venv/bin/pytest -m "not slow"   # 70 scenarios, ~4s, no network
 .venv/bin/pytest -m slow         # calls the real model
 ```
 

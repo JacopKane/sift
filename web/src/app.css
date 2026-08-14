@@ -1,48 +1,85 @@
 @import 'tailwindcss';
 
 /*
-  Verdicts read as what recovery costs, not as traffic lights. Mint flows back on
-  its own, amber is unresolved, and irreplaceable is a warm bone rather than red —
-  red would say "danger" about the files you most want to keep.
+  Radix Colors. Twelve steps per hue with fixed meanings, tuned so every hue sits
+  at the same perceived weight and every text step meets contrast against its own
+  backgrounds. Picking hexes by eye is how a palette ends up almost-harmonious.
 
-  Every verdict also carries a glyph, so the distinction survives colour blindness,
-  greyscale printing, and a bad monitor.
+    1-2   page background
+    3-5   component backgrounds, in rest / hover / active order
+    6-8   borders, in subtle / interactive / strong order
+    9-10  solid fills
+    11    text on a coloured background, low contrast
+    12    text, high contrast
 */
+@import '@radix-ui/colors/slate.css';
+@import '@radix-ui/colors/slate-dark.css';
+@import '@radix-ui/colors/jade.css';
+@import '@radix-ui/colors/jade-dark.css';
+@import '@radix-ui/colors/amber.css';
+@import '@radix-ui/colors/amber-dark.css';
+@import '@radix-ui/colors/iris.css';
+@import '@radix-ui/colors/iris-dark.css';
 
 @theme {
-	--font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
-	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+	--font-sans: ui-sans-serif, -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 }
 
 @layer base {
 	:root {
-		--ground: oklch(0.985 0.003 250);
-		--surface: oklch(1 0 0);
-		--edge: oklch(0.9 0.008 250);
-		--text: oklch(0.22 0.02 260);
-		--muted: oklch(0.52 0.02 260);
-		--faint: oklch(0.68 0.015 260);
+		/*
+		  Verdicts read as what recovery costs, not as traffic lights, and in the
+		  order you act on them: jade comes back on its own, amber is unresolved,
+		  iris is locked. Red is deliberately absent — it would say "danger" about
+		  the files you most want to keep.
 
-		--regenerable: oklch(0.62 0.13 175);
-		--review: oklch(0.66 0.15 70);
-		--irreplaceable: oklch(0.55 0.05 85);
-		--unknown: oklch(0.85 0.01 260);
+		  Iris rather than a warm neutral for irreplaceable: on the map, any grey is
+		  the same grey as "not yet judged", and the one thing that must never be
+		  mistaken is which arcs are off limits.
+		*/
+		--ground: var(--slate-1);
+		--surface: var(--slate-2);
+		--raised: var(--slate-3);
+		--hover: var(--slate-4);
+		--edge: var(--slate-6);
+		--edge-strong: var(--slate-8);
+		--muted: var(--slate-11);
+		--faint: var(--slate-10);
+		--text: var(--slate-12);
 
-		--ring: var(--regenerable);
+		--regenerable: var(--jade-11);
+		--regenerable-solid: var(--jade-9);
+		--regenerable-bg: var(--jade-3);
+
+		--review: var(--amber-11);
+		--review-solid: var(--amber-9);
+		--review-bg: var(--amber-3);
+
+		--irreplaceable: var(--iris-11);
+		--irreplaceable-solid: var(--iris-9);
+		--irreplaceable-bg: var(--iris-3);
+
+		--unknown: var(--slate-7);
+		--ring: var(--jade-8);
+
+		/* What to write on a step-9 fill. Radix's bright nines — amber among them —
+		   take dark text; the rest take white, in both themes. */
+		--on-solid: #fff;
+		--on-bright: var(--amber-12);
 	}
 
-	:root.dark {
-		--ground: oklch(0.16 0.015 260);
-		--surface: oklch(0.21 0.018 260);
-		--edge: oklch(0.29 0.02 260);
-		--text: oklch(0.94 0.008 260);
-		--muted: oklch(0.68 0.02 260);
-		--faint: oklch(0.5 0.02 260);
-
-		--regenerable: oklch(0.83 0.14 175);
-		--review: oklch(0.82 0.14 75);
-		--irreplaceable: oklch(0.9 0.03 85);
-		--unknown: oklch(0.36 0.02 260);
+	/*
+	  The document itself never scrolls — this is an app shell, not a page. Stated
+	  here rather than left to the layout, because a single descendant that escapes
+	  its column is enough to grow the root's scroll height, and then the whole app
+	  slides under a header that was supposed to be fixed.
+	*/
+	html,
+	body {
+		height: 100%;
+		overflow: hidden;
+		overscroll-behavior: none;
 	}
 
 	html {
@@ -52,14 +89,46 @@
 
 	body {
 		font-family: var(--font-sans);
+		font-size: 13px;
+		line-height: 1.45;
 		-webkit-font-smoothing: antialiased;
+		text-rendering: optimizeLegibility;
 	}
 
-	/* One visible focus treatment everywhere, including inside the SVG map. */
+	/* Numbers in tables and totals must not shuffle as they change. */
+	.tabular {
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum';
+	}
+
+	/*
+	  Affordance. A pointer means "this does something"; grab means "you can pick
+	  this up". Getting these wrong is the fastest way to make an interface feel
+	  unfinished, and no amount of styling compensates.
+	*/
+	button:not(:disabled),
+	[role='button']:not([aria-disabled='true']),
+	summary,
+	label:has(input[type='radio']),
+	label:has(input[type='checkbox']) {
+		cursor: pointer;
+	}
+
+	button:disabled {
+		cursor: not-allowed;
+	}
+
+	[draggable='true'] {
+		cursor: grab;
+	}
+	[draggable='true']:active {
+		cursor: grabbing;
+	}
+
 	:focus-visible {
 		outline: 2px solid var(--ring);
 		outline-offset: 2px;
-		border-radius: 4px;
+		border-radius: 5px;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -72,6 +141,48 @@
 	}
 }
 
+/*
+  Type scale. Four roles, no more: a display number, a section label, body, and
+  meta. Every heading in the app is the same label treatment, so "Basket" and
+  "Safe to reclaim" read as the same rank of thing rather than as two designs.
+*/
+@utility label {
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+
+@utility display {
+	font-size: 21px;
+	font-weight: 550;
+	line-height: 1.1;
+	letter-spacing: -0.01em;
+	font-variant-numeric: tabular-nums;
+}
+
+@utility meta {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--faint);
+}
+
+/* Panels: one border, one background, one radius, everywhere. */
+@utility panel {
+	border: 1px solid var(--edge);
+	background: var(--surface);
+	border-radius: 10px;
+}
+
+/* Only scroll where a scroll is meant to be, and never chain to the page. */
+@utility scroller {
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: var(--edge-strong) transparent;
+}
+
 @utility sr-only-focusable {
 	position: absolute;
 	left: -9999px;
@@ -80,4 +191,9 @@
 		top: 0.75rem;
 		z-index: 50;
 	}
+}
+
+/* More below the fold, said without a scrollbar to read. */
+@utility fade-bottom {
+	mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent);
 }

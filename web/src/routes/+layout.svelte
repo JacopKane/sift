@@ -3,8 +3,6 @@
 	let { children } = $props();
 </script>
 
-<a href="#main" class="sr-only-focusable rounded-md px-3 py-2" style="background: var(--surface); color: var(--text); border: 1px solid var(--edge)">
-	Skip to content
-</a>
+<a href="#main" class="sr-only-focusable panel px-3 py-2 text-[13px]">Skip to content</a>
 
 {@render children()}

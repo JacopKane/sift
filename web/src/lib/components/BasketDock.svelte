@@ -74,10 +74,8 @@
 >
 	<div class="flex items-center gap-2 border-b px-3.5 py-2.5" style="border-color: var(--edge)">
 		<ShoppingBasket size={15} aria-hidden="true" style="color: var(--muted)" />
-		<span class="flex-1 text-[11px] font-semibold tracking-[0.14em] uppercase" style="color: var(--muted)">
-			Basket
-		</span>
-		<span class="font-mono text-[13px]">{size(total)}</span>
+		<span class="label flex-1">Basket</span>
+		<span class="tabular text-[13px]">{size(total)}</span>
 	</div>
 
 	<div class="min-h-0 flex-1 overflow-y-auto px-2 py-2">
@@ -90,14 +88,14 @@
 		{:else}
 			<ul class="flex flex-col gap-0.5">
 				{#each items as item (item.path)}
-					<li class="flex items-center gap-1.5 rounded px-1.5 py-1 text-[12.5px]">
+					<li class="flex items-center gap-1.5 rounded px-1.5 py-1 text-[12.5px] transition-colors hover:bg-[var(--raised)]">
 						<span class="font-mono" style="color: {tokenFor(item.verdict)}" aria-hidden="true">
 							{glyphFor(item.verdict)}
 						</span>
 						<span class="min-w-0 flex-1 truncate" title={item.path}>
 							{item.path.split('/').pop()}
 						</span>
-						<span class="font-mono whitespace-nowrap" style="color: var(--faint)">
+						<span class="tabular whitespace-nowrap" style="color: var(--faint)">
 							{size(item.size_bytes)}
 						</span>
 					</li>
@@ -118,8 +116,8 @@
 			<button
 				type="button"
 				onclick={stop}
-				class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-semibold"
-				style="background: var(--review); color: var(--ground)"
+				class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-semibold transition-[filter] hover:brightness-105"
+				style="background: var(--review-solid); color: var(--on-bright)"
 			>
 				<X size={15} aria-hidden="true" />
 				Cancel — {counting}s
@@ -132,8 +130,10 @@
 				type="button"
 				onclick={start}
 				disabled={!items.length}
-				class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-semibold disabled:opacity-40"
-				style="background: var(--regenerable); color: var(--ground)"
+				class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-semibold transition-[filter] enabled:hover:brightness-105"
+				style={items.length
+					? 'background: var(--regenerable-solid); color: var(--on-solid)'
+					: 'background: var(--raised); color: var(--faint)'}
 			>
 				<Trash size={15} aria-hidden="true" />
 				Empty
@@ -142,7 +142,7 @@
 				type="button"
 				onclick={onClear}
 				disabled={!items.length}
-				class="rounded-md border p-2 disabled:opacity-40"
+				class="rounded-md border p-2 transition-colors enabled:hover:bg-[var(--raised)] disabled:opacity-40"
 				style="border-color: var(--edge); color: var(--muted)"
 				aria-label="Take everything out of the basket"
 				title="Take everything out"
@@ -153,7 +153,7 @@
 		<button
 			type="button"
 			onclick={onUndo}
-			class="rounded-md border p-2"
+			class="rounded-md border p-2 transition-colors hover:bg-[var(--raised)]"
 			style="border-color: var(--edge); color: var(--muted)"
 			aria-label="Undo the last emptying"
 			title="Undo"

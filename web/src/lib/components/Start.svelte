@@ -76,7 +76,12 @@
 	}
 </script>
 
-<div class="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center px-4 py-10">
+<!--
+	Fills whatever the header left over, rather than claiming a viewport height of
+	its own. `100vh` minus a guess at the header is a guess that is wrong at every
+	width where the header wraps, and the page grows a scrollbar over nothing.
+-->
+<div class="scroller flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8">
 	<div
 		role="region"
 		aria-label="Drop a folder to analyse"
@@ -93,20 +98,21 @@
 		ondrop={dropped}
 	>
 		<span
-			class="flex size-14 items-center justify-center rounded-full"
-			style="background: var(--edge); color: {over ? 'var(--regenerable)' : 'var(--muted)'}"
+			class="flex size-14 items-center justify-center rounded-full transition-colors"
+			style="background: {over ? 'var(--regenerable-bg)' : 'var(--raised)'};
+			       color: {over ? 'var(--regenerable)' : 'var(--faint)'}"
 		>
 			<FolderOpen size={26} aria-hidden="true" />
 		</span>
 
 		{#if reading || read}
-			<p class="text-lg" role="status" aria-live="polite">
-				Reading… {(counted || read).toLocaleString()} files
+			<p class="display" role="status" aria-live="polite">
+				Reading {(counted || read).toLocaleString()} files
 			</p>
 		{:else}
 			<div>
-				<p class="text-lg font-semibold">Drop a folder here</p>
-				<p class="mt-1 text-[13px]" style="color: var(--muted)">
+				<p class="display">Drop a folder here</p>
+				<p class="mt-1.5 text-[13px]" style="color: var(--muted)">
 					Nothing is uploaded — only names and sizes are read.
 				</p>
 			</div>
@@ -117,7 +123,7 @@
 				<button
 					type="button"
 					onclick={() => onPick(shortcut.path)}
-					class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] transition-colors"
+					class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] transition-colors hover:bg-[var(--raised)]"
 					style="border-color: var(--edge); color: var(--text)"
 				>
 					<shortcut.icon size={14} aria-hidden="true" />
