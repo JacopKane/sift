@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pytest_bdd import parsers, scenarios, then
 
+from sift.classify.classifier import _render_one
 from sift.models import Classification, ScanNode, Verdict
 from sift.survey import candidates_for_model
 from tests.machine import Machine
@@ -87,3 +88,22 @@ def reason_refers_to_contents(
     # contents should mention at least one of them rather than the folder's name.
     signals = ["mp4", "video", "recording", "zip", "archive", "dmg", "installer", "pdf"]
     assert any(signal in reason for signal in signals), reason
+
+
+@then("each candidate says when it was last opened")
+def candidates_say_last_used(reports: list[ScanNode]) -> None:
+    offered = candidates_for_model(reports[-1])
+    assert offered, "the fixture should produce candidates"
+    assert all(c.last_used is not None for c in offered), (
+        "the model is deciding whether a folder is disposable without being told "
+        "whether anyone has opened it — the one fact that would settle most of them"
+    )
+
+
+@then("the model is shown that in words it can reason about")
+def prompt_carries_last_used(reports: list[ScanNode]) -> None:
+    offered = candidates_for_model(reports[-1])
+    rendered = _render_one(offered[0])
+    assert "last opened" in rendered, (
+        f"a timestamp the model has to do arithmetic on is not a fact it can use:\n{rendered}"
+    )

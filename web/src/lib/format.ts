@@ -56,3 +56,24 @@ export function size(bytes: number): string {
 	}
 	return `${unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
 }
+
+/**
+ * How long ago, in words.
+ *
+ * "3 years ago" settles an argument a date never does — nobody subtracts
+ * 2022-11-04 from today in their head while deciding whether to delete something.
+ */
+export function ago(when: number | null): string {
+	if (!when) return '';
+	const days = Math.max(Math.floor((Date.now() / 1000 - when) / 86_400), 0);
+	if (days < 1) return 'today';
+	if (days < 14) return `${days}d ago`;
+	if (days < 60) return `${Math.floor(days / 7)}w ago`;
+	if (days < 730) return `${Math.floor(days / 30)}mo ago`;
+	return `${Math.floor(days / 365)}y ago`;
+}
+
+/** True once something is old enough that its age is the point. */
+export function stale(when: number | null): boolean {
+	return !!when && Date.now() / 1000 - when > 365 * 86_400;
+}

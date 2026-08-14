@@ -2,7 +2,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Info from '@lucide/svelte/icons/info';
 	import GripVertical from '@lucide/svelte/icons/grip-vertical';
-	import { size, glyphFor, tokenFor, describe } from '$lib/format';
+	import { size, glyphFor, tokenFor, describe, ago, stale } from '$lib/format';
 	import type { PlanItem } from '$lib/types';
 
 	let { item, onBasket }: { item: PlanItem; onBasket?: (path: string) => void } = $props();
@@ -42,7 +42,20 @@
 			<span class="sr-only">, {describe(item.verdict)}</span>
 		</span>
 
-		<span class="tabular text-[13px] whitespace-nowrap" style="color: var(--muted)">
+		<!-- The age is the argument. A folder nobody has opened in three years is a
+		     different decision from the same folder opened this morning, and the
+		     size alone cannot tell you which one you are looking at. -->
+		{#if item.last_used}
+			<span
+				class="hidden text-[11.5px] whitespace-nowrap sm:inline"
+				style="color: {stale(item.last_used) ? 'var(--review)' : 'var(--faint)'}"
+				title="Last opened {new Date(item.last_used * 1000).toLocaleDateString()}"
+			>
+				{ago(item.last_used)}
+			</span>
+		{/if}
+
+		<span class="tabular w-[4.75rem] text-right text-[13px]" style="color: var(--muted)">
 			{size(item.size_bytes)}
 		</span>
 

@@ -54,3 +54,10 @@ Feature: Turning verdicts into something you can act on
     Then no proposal covers a path inside another proposal
     And "Library/Caches" is proposed
     And "Library/Caches/pip" is not proposed
+
+  Scenario: A plan is the same whether or not the tree has been coloured already
+    When I survey the machine
+    And "Downloads" is judged to rebuild itself
+    And the plan is built, the verdicts written back, and the plan built again
+    Then both plans account for the same bytes
+    And neither lists anything twice

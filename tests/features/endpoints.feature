@@ -15,6 +15,15 @@ Feature: What the browser can do
     And "Sites/client-app/node_modules" is gone from where it was
     And the browser can undo it
 
+  Scenario: What was reclaimed is gone from what the browser is looking at
+    When the browser surveys the machine
+    And the browser baskets "Sites/client-app/node_modules"
+    And the browser empties the basket
+    Then the plan it gets back no longer offers it
+    And the map it gets back no longer draws it
+    And the totals came down by what was freed
+    And nothing is counted twice in what comes back
+
   Scenario: The browser can bin anything, and is told what it is binning
     When the browser surveys the machine
     And the browser baskets ".ssh"

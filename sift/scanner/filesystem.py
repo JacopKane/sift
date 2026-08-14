@@ -81,7 +81,7 @@ def _walk_dir(
     # The root is never pruned: the caller asked to look at it by name, so
     # answering with a single total would be answering a different question.
     if prune is not None and depth > 0 and prune(path):
-        node.size_bytes, node.allocated_bytes = _measure(path)
+        node.size_bytes, node.allocated_bytes, node.last_used = _measure(path)
         yield node
         return node
 
@@ -117,6 +117,11 @@ def _walk_dir(
         node.children.append(child)
         node.size_bytes += child.size_bytes
         node.allocated_bytes += child.allocated_bytes
+        # A folder is as recently used as its most recently used file. Taking the
+        # directory's own mtime instead would call a project untouched since the
+        # last time a file was added to it, which is not the same question.
+        if child.last_used is not None:
+            node.last_used = max(node.last_used or 0.0, child.last_used)
 
     yield node
     return node
@@ -135,28 +140,38 @@ _PARALLEL_FROM = 64
 """Below this many subdirectories a thread pool costs more than it saves."""
 
 
-def _measure(path: Path) -> tuple[int, int]:
-    """Total a subtree without building anything.
+def _measure(path: Path) -> tuple[int, int, float | None]:
+    """Total a subtree without building anything, and note when it was last used.
 
     Strings rather than Path objects, and no model construction: this runs over
-    the parts of a disk nobody needs described, only counted.
+    the parts of a disk nobody needs described, only counted. Last use rides along
+    on the stat calls already being made — walking a pruned subtree a second time
+    to ask would give back the whole reason for pruning it.
     """
     roots = _immediate_dirs(str(path))
-    size, allocated = _measure_files(str(path))
+    size, allocated, used = _measure_files(str(path))
 
     if len(roots) < _PARALLEL_FROM:
         for root in roots:
-            counted, occupied = _measure_serial(root)
+            counted, occupied, touched = _measure_serial(root)
             size += counted
             allocated += occupied
-        return size, allocated
+            used = _later(used, touched)
+        return size, allocated, used
 
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        for counted, occupied in pool.map(_measure_serial, roots):
+        for counted, occupied, touched in pool.map(_measure_serial, roots):
             size += counted
             allocated += occupied
+            used = _later(used, touched)
 
-    return size, allocated
+    return size, allocated, used
+
+
+def _later(one: float | None, two: float | None) -> float | None:
+    if one is None:
+        return two
+    return one if two is None else max(one, two)
 
 
 def _immediate_dirs(path: str) -> list[str]:
@@ -168,24 +183,27 @@ def _immediate_dirs(path: str) -> list[str]:
         return []
 
 
-def _measure_files(path: str) -> tuple[int, int]:
+def _measure_files(path: str) -> tuple[int, int, float | None]:
     """Files directly in *path*, ignoring its subdirectories."""
     size = allocated = 0
+    used: float | None = None
     try:
         entries = list(os.scandir(path))
     except PermissionError:
-        return 0, 0
+        return 0, 0, None
     for entry in entries:
         if entry.is_symlink() or entry.is_dir():
             continue
         stat = entry.stat(follow_symlinks=False)
         size += stat.st_size
         allocated += stat.st_blocks * _BLOCK_SIZE
-    return size, allocated
+        used = _later(used, _last_used(stat))
+    return size, allocated, used
 
 
-def _measure_serial(path: str) -> tuple[int, int]:
+def _measure_serial(path: str) -> tuple[int, int, float | None]:
     size = allocated = 0
+    used: float | None = None
     stack = [path]
 
     while stack:
@@ -203,8 +221,9 @@ def _measure_serial(path: str) -> tuple[int, int]:
                 stat = entry.stat(follow_symlinks=False)
                 size += stat.st_size
                 allocated += stat.st_blocks * _BLOCK_SIZE
+                used = _later(used, _last_used(stat))
 
-    return size, allocated
+    return size, allocated, used
 
 
 def _scan_file(entry: os.DirEntry[str]) -> ScanNode:
@@ -215,4 +234,16 @@ def _scan_file(entry: os.DirEntry[str]) -> ScanNode:
         is_dir=False,
         size_bytes=stat.st_size,
         allocated_bytes=stat.st_blocks * _BLOCK_SIZE,
+        last_used=_last_used(stat),
     )
+
+
+def _last_used(stat: os.stat_result) -> float:
+    """The most recent of read and write.
+
+    Access time alone is unreliable — macOS mounts with relatime, so opening a
+    file may not update it — and modification time alone calls a file you read
+    every week untouched since you wrote it. The later of the two is the honest
+    answer to "when did this last matter to you".
+    """
+    return max(stat.st_atime, stat.st_mtime)

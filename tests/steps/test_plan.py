@@ -182,3 +182,64 @@ def no_nested_proposals(plan: Plan) -> None:
 def nothing_irreplaceable_proposed(plan: Plan) -> None:
     for item in plan.proposals:
         assert item.verdict is not Verdict.IRREPLACEABLE
+
+
+@when(parsers.parse('"{relpath}" is judged to rebuild itself'), target_fixture="judgement")
+def judged_to_rebuild(machine: Machine, reports: list[ScanNode], relpath: str) -> Classification:
+    node = next(n for n in _all(reports[-1]) if n.path == machine.path(relpath))
+    return Classification(
+        path=node.path,
+        verdict=Verdict.REGENERABLE,
+        label=node.name,
+        restore="download it again",
+        size_bytes=node.size_bytes,
+        reason="a real judgement, shaped exactly as the model returns one",
+    )
+
+
+@when(
+    "the plan is built, the verdicts written back, and the plan built again",
+    target_fixture="both",
+)
+def built_twice(reports: list[ScanNode], judgement: Classification) -> tuple[Plan, Plan]:
+    tree = reports[-1]
+    first = build_plan(tree, [judgement])
+    # What the survey does next, and what any later rebuild has to survive: the
+    # model's verdicts written onto the tree, where they become indistinguishable
+    # from the catalog's.
+    for node in _all(tree):
+        if node.path == judgement.path and node.verdict is None:
+            node.verdict = judgement.verdict
+            node.label = judgement.label
+            node.restore = judgement.restore
+    return first, build_plan(tree, [judgement])
+
+
+@then("both plans account for the same bytes")
+def both_account_the_same(both: tuple[Plan, Plan]) -> None:
+    first, again = both
+    assert _claimed(first) == _claimed(again), (
+        f"rebuilding after a reclaim gave {_claimed(again)} where the survey gave "
+        f"{_claimed(first)} — every judged item counted once from the catalog pass "
+        "and once from the model pass"
+    )
+
+
+@then("neither lists anything twice")
+def neither_lists_twice(both: tuple[Plan, Plan]) -> None:
+    for plan in both:
+        paths = [p for item in [*plan.proposals, *plan.irreplaceable] for p in item.paths]
+        assert len(paths) == len(set(paths)), f"listed twice: {paths}"
+
+
+def _claimed(plan: Plan) -> int:
+    return sum(item.size_bytes for item in [*plan.proposals, *plan.irreplaceable])
+
+
+def _all(tree: ScanNode) -> list[ScanNode]:
+    found, stack = [], [tree]
+    while stack:
+        node = stack.pop()
+        found.append(node)
+        stack.extend(node.children)
+    return found

@@ -8,7 +8,7 @@ a filesystem library.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -78,6 +78,9 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
     # The last survey per root, so a question can be answered without walking the
     # disk again. A local single-user tool; nothing here needs a session store.
     surveyed: dict[str, ScanNode] = {}
+    # Kept beside the tree so the plan can be rebuilt after something is
+    # reclaimed without asking the model the same question twice.
+    judged: dict[str, list[Classification]] = {}
     basket = Basket()
 
     @app.get("/", response_class=HTMLResponse)
@@ -95,7 +98,7 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
     # answerable while they work.
     @app.get("/api/survey")
     async def survey_endpoint(root: str, judge: bool = False) -> EventSourceResponse:
-        return EventSourceResponse(_stream(Path(root).expanduser(), home, judge, surveyed))
+        return EventSourceResponse(_stream(Path(root).expanduser(), home, judge, surveyed, judged))
 
     @app.post("/api/ask")
     def ask_endpoint(question: Question) -> dict[str, Any]:
@@ -143,8 +146,19 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
 
     @app.post("/api/basket/empty")
     def basket_empty(root: str) -> dict[str, Any]:
-        _surveyed_or_409(surveyed, root)
+        tree = _surveyed_or_409(surveyed, root)
         receipt = basket.empty_into(held)
+
+        # The bytes moved, so the picture has to move with them. Leaving the plan
+        # as it was is how a delete that worked perfectly reads as one that did
+        # nothing: the row is still listed, the map still draws it, the total
+        # still counts it. Rebuilt from the tree we already have and the answers
+        # the model already gave, so nothing is asked twice.
+        _forget(tree, [entry.original for entry in receipt.moved])
+        settled = judged.get(str(Path(root).expanduser()), [])
+        plan = build_plan(tree, settled)
+        _apply(tree, settled)
+
         return {
             "freed_bytes": receipt.freed_bytes,
             "moved": [str(entry.original) for entry in receipt.moved],
@@ -152,6 +166,8 @@ def create_app(home: Path | None = None, quarantine: Path | None = None) -> Fast
                 str(e.original) for e in receipt.moved if e.verdict is Verdict.IRREPLACEABLE
             ],
             "refused": receipt.refused,
+            "plan": plan.model_dump(mode="json"),
+            "chart": _chart(tree, tree.size_bytes),
         }
 
     @app.post("/api/undo")
@@ -283,11 +299,48 @@ def _stream(
     home: Path | None,
     judge: bool = False,
     surveyed: dict[str, ScanNode] | None = None,
+    judged: dict[str, list[Classification]] | None = None,
 ) -> Iterator[dict[str, str]]:
     # A whole-volume survey needs the exclusions; a project folder needs none, and
     # applying them anyway costs nothing.
     exclude = boot_volume_exclusions() if root == Path("/") else ()
 
+    try:
+        yield from _walk_and_judge(root, home, judge, surveyed, judged, exclude)
+    except Exception as failure:
+        # Said out loud, in the stream, rather than letting the connection drop.
+        # A dead stream leaves the browser to guess why, and the guess it had was
+        # "macOS is blocking this folder" — which sent people to System Settings
+        # over a model that had timed out.
+        yield {"event": "failed", "data": json.dumps({"reason": _why(root, failure)})}
+
+
+def _why(root: Path, failure: Exception) -> str:
+    """What to tell someone, in their words, about why the survey stopped."""
+    if isinstance(failure, PermissionError):
+        return (
+            f"macOS would not let Sift read {root}. Grant Full Disk Access to the "
+            "terminal you started it from, in System Settings > Privacy & Security."
+        )
+    if isinstance(failure, FileNotFoundError):
+        return f"There is no folder at {root}."
+    detail = str(failure).strip() or failure.__class__.__name__
+    if "connection" in detail.lower() or "timeout" in detail.lower():
+        return (
+            f"The survey finished, but the model could not be reached to judge it: "
+            f"{detail[:160]}. Check the network and your key in .env, then try again."
+        )
+    return f"The survey stopped: {detail[:200]}"
+
+
+def _walk_and_judge(
+    root: Path,
+    home: Path | None,
+    judge: bool,
+    surveyed: dict[str, ScanNode] | None,
+    judged: dict[str, list[Classification]] | None,
+    exclude: tuple[Path, ...] | Sequence[Path],
+) -> Iterator[dict[str, str]]:
     tree: ScanNode | None = None
     for node in survey(root, exclude=exclude, home=home):
         tree = node
@@ -318,12 +371,72 @@ def _stream(
     # a folder the catalog knows nothing about — a Downloads folder — draws
     # entirely grey.
     _apply(tree, judgements)
+    if judged is not None:
+        judged[str(root)] = judgements
     yield {
         "event": "done",
         "data": json.dumps(
             {"plan": plan.model_dump(mode="json"), "chart": _chart(tree, tree.size_bytes)}
         ),
     }
+
+
+def _forget(tree: ScanNode, moved: list[Path]) -> None:
+    """Take what is no longer on disk out of the tree, sizes and all.
+
+    A path can survive its own reclaim: a proposal that excluded a child leaves
+    the directory behind holding it. So reality decides — gone means dropped,
+    still there means re-measured — and every ancestor is corrected afterwards.
+    """
+    if not moved:
+        return
+
+    # What each directory holds in loose files of its own, taken before anything
+    # is removed. Derived afterwards instead, a pruned child's bytes reappear as
+    # its parent's loose weight and the total never moves.
+    loose: dict[Path, int] = {}
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        loose[node.path] = node.size_bytes - sum(child.size_bytes for child in node.children)
+        stack.extend(node.children)
+
+    touched = set(moved)
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        node.children = [
+            child
+            for child in node.children
+            if not (child.path in touched and not child.path.exists())
+        ]
+        stack.extend(node.children)
+
+    for path in touched:
+        if path.exists():
+            _remeasure(tree, path, loose)
+    _resize(tree, loose)
+
+
+def _remeasure(tree: ScanNode, path: Path, loose: dict[Path, int]) -> None:
+    """Re-read one directory that survived because something was kept inside it."""
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        if node.path == path:
+            node.children = []
+            node.size_bytes = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+            loose[path] = node.size_bytes
+            return
+        stack.extend(node.children)
+
+
+def _resize(node: ScanNode, loose: dict[Path, int]) -> int:
+    """Sum the tree bottom-up, keeping each directory's own loose files."""
+    node.size_bytes = max(loose.get(node.path, node.size_bytes), 0) + sum(
+        _resize(child, loose) for child in node.children
+    )
+    return node.size_bytes
 
 
 def _apply(tree: ScanNode, judgements: list[Classification]) -> None:
@@ -372,6 +485,7 @@ def _chart(node: ScanNode, total: int, depth: int = 0) -> dict[str, Any]:
         "size_bytes": node.size_bytes,
         "verdict": node.verdict.value if node.verdict else None,
         "label": node.label,
+        "last_used": node.last_used,
         "unreadable": node.unreadable,
         "children": children,
     }

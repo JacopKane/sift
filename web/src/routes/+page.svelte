@@ -32,6 +32,7 @@
 	let asking = $state(false);
 	let answer = $state<AskResult | null>(null);
 	let problem = $state('');
+	let failed = $state(false);
 
 	let basket = $state<BasketState>({ items: [], total_bytes: 0 });
 	let duplicates = $state<DuplicateReport | null>(null);
@@ -84,6 +85,7 @@
 		counted = 0;
 		answer = null;
 		problem = '';
+		failed = false;
 
 		const stream = new EventSource(`/api/survey?root=${encodeURIComponent(where)}&judge=true`);
 
@@ -96,6 +98,15 @@
 		stream.addEventListener('judging', (e) => {
 			status = `judging ${JSON.parse(e.data).count}…`;
 		});
+		// The server says why it stopped. Guessing is how a model timing out came
+		// back as "macOS is blocking your Downloads folder" — a confident wrong
+		// answer that sends you into System Settings for a problem you don't have.
+		stream.addEventListener('failed', (e) => {
+			problem = JSON.parse(e.data).reason;
+			surveying = false;
+			failed = true;
+			stream.close();
+		});
 		stream.addEventListener('done', (e) => {
 			const payload = JSON.parse(e.data);
 			chart = payload.chart;
@@ -106,7 +117,8 @@
 			stream.close();
 		});
 		stream.onerror = () => {
-			problem = `Could not read ${where}. macOS may be blocking it — grant Full Disk Access to your terminal in System Settings › Privacy & Security, then try again.`;
+			if (failed) return; // already explained by the server
+			problem = `Lost the connection while reading ${where}. Sift may have stopped — check the terminal it is running in.`;
 			surveying = false;
 			stream.close();
 		};
@@ -168,8 +180,20 @@
 			method: 'POST'
 		});
 		const body = await res.json();
-		status = `moved ${size(body.freed_bytes)} to the Trash`;
+		if (!res.ok) {
+			problem = body.detail ?? 'Nothing moved. Sift could not reach those files.';
+			return;
+		}
+		// What moved has to leave the page with it, or a delete that worked reads
+		// as one that did nothing: the row still listed, the map still drawing it.
+		plan = body.plan;
+		chart = body.chart;
+		duplicates = null;
 		basket = { items: [], total_bytes: 0 };
+		status = body.refused.length
+			? `moved ${size(body.freed_bytes)}, ${body.refused.length} could not move`
+			: `moved ${size(body.freed_bytes)} to the Trash`;
+		problem = body.refused.length ? body.refused.join('\n') : '';
 	}
 
 	async function clearBasket() {
@@ -275,13 +299,21 @@
 
 			<section class="scroller flex min-h-0 flex-col gap-3 pr-1" aria-label="What was found">
 				{#if problem}
-					<p
-						class="shrink-0 rounded-lg border px-3.5 py-2.5 text-[13px]"
+					<div
+						class="flex shrink-0 items-start gap-3 rounded-lg border px-3.5 py-2.5 text-[13px]"
 						style="border-color: var(--review); background: var(--review-bg); color: var(--text)"
 						role="alert"
 					>
-						{problem}
-					</p>
+						<span class="flex-1 whitespace-pre-line">{problem}</span>
+						<button
+							type="button"
+							onclick={() => (surveyedRoot ? survey(surveyedRoot) : restart())}
+							class="shrink-0 rounded-md border px-2 py-1 text-[12px] transition-colors hover:bg-[var(--hover)]"
+							style="border-color: var(--edge-strong)"
+						>
+							Try again
+						</button>
+					</div>
 				{/if}
 
 				<!--
@@ -372,6 +404,12 @@
 						bytes={suggested}
 						token="var(--regenerable-solid)"
 					>
+						{#if !safe.length && !duplicates?.sets.length}
+							<p class="px-1 py-3 text-center text-[12.5px]" style="color: var(--faint)">
+								Nothing here rebuilds itself. Everything found is below — or ask for
+								something specific above.
+							</p>
+						{/if}
 						{#each safe as item (item.label + item.paths[0])}
 							<Row {item} onBasket={addToBasket} />
 						{/each}
@@ -390,8 +428,8 @@
 								>
 									<Copy size={13} aria-hidden="true" />
 									{hunting
-										? 'Reading the ones that share a size…'
-										: 'Also look for the same file twice'}
+										? 'Reading files that share a size…'
+										: 'Also look for duplicates'}
 								</button>
 							{/if}
 						{/snippet}

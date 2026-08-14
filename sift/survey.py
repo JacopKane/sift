@@ -185,10 +185,16 @@ def _describe_files(parent: ScanNode, files: list[ScanNode]) -> Candidate:
         label=f"loose files in {parent.name}",
         size_bytes=sum(file.size_bytes for file in files),
         file_count=len(files),
+        last_used=_newest(files),
         excluding=sorted(child.path for child in parent.children if child.path not in covered),
         extensions=dict(sorted(extensions.items(), key=lambda kv: kv[1], reverse=True)),
         largest_files=[FileSummary(name=f.name, size_bytes=f.size_bytes) for f in largest],
     )
+
+
+def _newest(files: list[ScanNode]) -> float | None:
+    used = [file.last_used for file in files if file.last_used is not None]
+    return max(used) if used else None
 
 
 def _describe(node: ScanNode, excluding: set[Path] | None = None) -> Candidate:
@@ -205,6 +211,7 @@ def _describe(node: ScanNode, excluding: set[Path] | None = None) -> Candidate:
             label=node.name,
             size_bytes=node.size_bytes,
             file_count=1,
+            last_used=node.last_used,
             extensions={suffix: node.size_bytes},
             largest_files=[FileSummary(name=node.name, size_bytes=node.size_bytes)],
         )
@@ -227,6 +234,9 @@ def _describe(node: ScanNode, excluding: set[Path] | None = None) -> Candidate:
         label=f"the rest of {node.name}" if skip else node.name,
         size_bytes=sum(file.size_bytes for file in files) if skip else node.size_bytes,
         file_count=len(files),
+        # Of what is left after exclusions, not of the whole directory: the file
+        # being judged separately may be the only thing anyone opened this year.
+        last_used=_newest(files) if skip else node.last_used,
         excluding=sorted(skip),
         extensions=dict(sorted(extensions.items(), key=lambda kv: kv[1], reverse=True)),
         largest_files=[FileSummary(name=f.name, size_bytes=f.size_bytes) for f in largest],

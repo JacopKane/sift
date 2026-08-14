@@ -61,3 +61,10 @@ Feature: Asking a model about what the catalog could not name
     When I survey the machine
     And I ask the model about the candidates
     Then the reason given for "Downloads" refers to what is inside it
+
+  @slow
+  Scenario: The model is told how long it has been since anything was opened
+    Given a machine that looks like a developer's Mac
+    When I survey the machine
+    Then each candidate says when it was last opened
+    And the model is shown that in words it can reason about

@@ -60,3 +60,39 @@ def last_report_carries_the_tree(reports: list[ScanNode], machine: Machine) -> N
     assert tree.size_bytes == machine.readable_bytes
     # Everything reported appears in the tree exactly once, and vice versa.
     assert len(list(all_nodes(tree))) == len(reports)
+
+
+@then("every file says when it was last opened")
+def files_say_when_last_opened(reports: list[ScanNode]) -> None:
+    files = [node for node in _every(reports[-1]) if not node.is_dir]
+    assert files, "the fixture should hold files"
+    assert all(node.last_used is not None for node in files), (
+        "'you have not opened this in three years' is the most persuasive thing a "
+        "disk tool can say, and it is one field on a stat call we already make"
+    )
+
+
+@then("a directory says when anything inside it was last opened")
+def directories_carry_the_newest(reports: list[ScanNode]) -> None:
+    for node in _every(reports[-1]):
+        if not node.is_dir or not node.children:
+            continue
+        newest = max(
+            (child.last_used for child in node.children if child.last_used is not None),
+            default=None,
+        )
+        if newest is None:
+            continue
+        assert node.last_used is not None and node.last_used >= newest, (
+            f"{node.name} claims to be older than something inside it — a folder is "
+            "as recently used as its most recently used file, or you archive live work"
+        )
+
+
+def _every(tree: ScanNode) -> list[ScanNode]:
+    found, stack = [], [tree]
+    while stack:
+        node = stack.pop()
+        found.append(node)
+        stack.extend(node.children)
+    return found

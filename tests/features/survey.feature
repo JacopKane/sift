@@ -40,3 +40,8 @@ Feature: Surveying a machine
     And "Sites" is reported before the machine root
     And the machine root is reported last
     And the last report carries the whole tree
+
+  Scenario: The survey records when each thing was last opened
+    When I survey the machine
+    Then every file says when it was last opened
+    And a directory says when anything inside it was last opened

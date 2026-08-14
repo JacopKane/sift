@@ -1,6 +1,7 @@
 import type { Verdict } from '$lib/format';
 
 export type PlanItem = {
+	last_used: number | null;
 	label: string;
 	verdict: Verdict;
 	size_bytes: number;

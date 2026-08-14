@@ -7,6 +7,7 @@ what fills it.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
@@ -163,9 +164,30 @@ def _render_one(candidate: Candidate) -> str:
     return (
         f"{candidate.path}\n"
         f"  size: {_size(candidate.size_bytes)} across {candidate.file_count} files\n"
+        f"  last opened: {_ago(candidate.last_used)}\n"
         f"  fills: {fills or '(nothing)'}\n"
         f"  largest: {largest or '(no files)'}"
     )
+
+
+def _ago(when: float | None) -> str:
+    """How long ago, in words.
+
+    A Unix timestamp asks the model to do arithmetic against a date it does not
+    reliably know. "3 years ago" is the same fact in a form it can actually use.
+    """
+    if when is None:
+        return "unknown"
+    days = max(int((time.time() - when) / 86_400), 0)
+    if days < 1:
+        return "today"
+    if days < 14:
+        return f"{days} day{'s' if days > 1 else ''} ago"
+    if days < 60:
+        return f"{days // 7} weeks ago"
+    if days < 730:
+        return f"{days // 30} months ago"
+    return f"{days // 365} years ago"
 
 
 def _size(count: int) -> str:

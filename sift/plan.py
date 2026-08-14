@@ -20,7 +20,13 @@ def build_plan(
     classifications: Sequence[Classification] = (),
 ) -> Plan:
     """Assemble what the catalog settled and what the model judged into one plan."""
-    items = [*_from_catalog(tree), *_from_model(tree, classifications)]
+    # The catalog pass is told what the model already covers. Without that, a tree
+    # whose model verdicts have been written back — which is every tree after the
+    # survey finishes — has each judged item counted twice: once by the catalog
+    # walk, which can no longer tell a model verdict from a rule, and once here.
+    # It only bit when a plan was rebuilt, and then it promised twice the disk.
+    covered = {classification.path for classification in classifications}
+    items = [*_from_catalog(tree, covered), *_from_model(tree, classifications)]
 
     proposals = sorted(
         (item for item in items if item.verdict is not Verdict.IRREPLACEABLE),
@@ -46,9 +52,9 @@ def _total(items: Sequence[PlanItem], verdict: Verdict) -> int:
     return sum(item.size_bytes for item in items if item.verdict is verdict)
 
 
-def _from_catalog(tree: ScanNode) -> Iterator[PlanItem]:
+def _from_catalog(tree: ScanNode, covered: set[Path] | None = None) -> Iterator[PlanItem]:
     grouped: dict[str, list[ScanNode]] = {}
-    for node in _topmost_settled(tree):
+    for node in _topmost_settled(tree, covered or set()):
         # Falling back to the path keeps a rule-less node its own group rather than
         # silently merging every unlabelled node into one.
         grouped.setdefault(node.rule_id or str(node.path), []).append(node)
@@ -64,6 +70,7 @@ def _from_catalog(tree: ScanNode) -> Iterator[PlanItem]:
             restore=first.restore or CANNOT_RESTORE,
             restore_time=first.restore_time,
             rule_id=first.rule_id,
+            last_used=_newest(nodes),
         )
 
 
@@ -81,18 +88,34 @@ def _from_model(tree: ScanNode, classifications: Sequence[Classification]) -> It
             excluding=classification.excluding,
             restore=classification.restore,
             reason=classification.reason,
+            last_used=_last_used_at(tree, classification.path),
         )
 
 
-def _topmost_settled(tree: ScanNode) -> Iterator[ScanNode]:
+def _newest(nodes: Sequence[ScanNode]) -> float | None:
+    used = [node.last_used for node in nodes if node.last_used is not None]
+    return max(used) if used else None
+
+
+def _last_used_at(tree: ScanNode, path: Path) -> float | None:
+    node = _node_at(tree, path)
+    return node.last_used if node else None
+
+
+def _topmost_settled(tree: ScanNode, covered: set[Path]) -> Iterator[ScanNode]:
     """Every settled node whose ancestors are all unsettled.
 
     Descending past a settled node would count the same bytes twice — once for the
-    cache directory, once for everything inside it.
+    cache directory, once for everything inside it. Nodes in *covered* are being
+    reported by the model pass instead, so they are stepped over rather than
+    yielded, and their children are not descended into either: the model's item
+    already accounts for them.
     """
     stack = list(tree.children)
     while stack:
         node = stack.pop()
+        if node.path in covered:
+            continue
         if node.verdict is not None:
             yield node
         else:

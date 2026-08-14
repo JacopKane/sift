@@ -52,3 +52,9 @@ Feature: Serving a survey to a browser
     When the browser opens the app
     Then it receives an HTML page
     And the page names the product
+
+  Scenario: A survey that breaks says what broke
+    Given a machine that looks like a developer's Mac
+    When the survey is asked for a folder that is not there
+    Then the stream says what went wrong in words
+    And it does not blame the disk permissions

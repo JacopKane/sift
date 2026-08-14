@@ -195,3 +195,27 @@ def receives_html(page: str) -> None:
 @then("the page names the product")
 def page_names_product(page: str) -> None:
     assert "Sift" in page
+
+
+@when("the survey is asked for a folder that is not there", target_fixture="events")
+def survey_a_missing_folder(machine: Machine) -> list[dict[str, Any]]:
+    client = TestClient(create_app(home=machine.root))
+    response = client.get("/api/survey", params={"root": str(machine.root / "no-such-folder")})
+    assert response.status_code == 200
+    return _events(response.text)
+
+
+@then("the stream says what went wrong in words")
+def stream_says_what_went_wrong(events: list[dict[str, Any]]) -> None:
+    failures = [event for event in events if event["event"] == "failed"]
+    assert failures, (
+        "the stream just stopped. The browser cannot tell a broken survey from a "
+        "finished one, so it guesses — and it guessed permissions"
+    )
+    assert failures[-1]["data"]["reason"].strip(), "an empty reason explains nothing"
+
+
+@then("it does not blame the disk permissions")
+def does_not_blame_permissions(events: list[dict[str, Any]]) -> None:
+    reason = [e for e in events if e["event"] == "failed"][-1]["data"]["reason"].lower()
+    assert "full disk access" not in reason, f"sent someone to System Settings over {reason!r}"

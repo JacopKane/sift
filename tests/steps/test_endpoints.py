@@ -6,12 +6,13 @@ pointed somewhere disposable. Nothing here calls a model.
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections.abc import Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,10 +39,13 @@ def client(machine: Machine) -> Iterator[TestClient]:
         yield client
 
 
-@when("the browser surveys the machine")
-def browser_surveys_for_endpoints(client: TestClient, machine: Machine) -> None:
+@when("the browser surveys the machine", target_fixture="surveyed_plan")
+def browser_surveys_for_endpoints(client: TestClient, machine: Machine) -> dict[str, Any]:
     response = client.get("/api/survey", params={"root": str(machine.root)})
     assert response.status_code == 200
+    done = [frame for frame in response.text.split("\r\n\r\n") if "event: done" in frame]
+    payload = json.loads(done[-1].split("data: ", 1)[1])
+    return cast(dict[str, Any], payload["plan"])
 
 
 @when(parsers.parse('the browser baskets "{relpath}"'), target_fixture="reply")
@@ -192,4 +196,54 @@ def page_comes_back_first(page: float, scan: Future[float]) -> None:
     assert page < scan.result(timeout=60), (
         "the page waited for the duplicate scan — a long job is holding the event loop, "
         "so the whole interface freezes while it runs"
+    )
+
+
+@then("the plan it gets back no longer offers it")
+def plan_no_longer_offers(emptied: dict[str, Any], machine: Machine) -> None:
+    gone = str(machine.path("Sites/client-app/node_modules"))
+    plan = emptied.get("plan")
+    assert plan is not None, (
+        "emptying returned no plan, so the browser is still showing what it just "
+        "moved — which reads as the delete having done nothing"
+    )
+    offered = [path for item in plan["proposals"] for path in item["paths"]]
+    assert gone not in offered, f"{gone} is on disk no longer but still on offer"
+
+
+@then("the map it gets back no longer draws it")
+def map_no_longer_draws(emptied: dict[str, Any], machine: Machine) -> None:
+    gone = str(machine.path("Sites/client-app/node_modules"))
+
+    def paths(node: dict[str, Any]) -> list[str]:
+        found = [node["path"]]
+        for child in node["children"]:
+            found.extend(paths(child))
+        return found
+
+    assert gone not in paths(emptied["chart"]), "the map still shows what was reclaimed"
+
+
+@then("the totals came down by what was freed")
+def totals_came_down(emptied: dict[str, Any], surveyed_plan: dict[str, Any]) -> None:
+    before = surveyed_plan["surveyed_bytes"]
+    after = emptied["plan"]["surveyed_bytes"]
+    assert after < before, f"the disk got smaller but the total did not: {before} -> {after}"
+    assert before - after == emptied["freed_bytes"], (
+        f"freed {emptied['freed_bytes']} but the total moved by {before - after}"
+    )
+
+
+@then("nothing is counted twice in what comes back")
+def nothing_counted_twice(emptied: dict[str, Any]) -> None:
+    plan = emptied["plan"]
+    seen: list[str] = [path for item in plan["proposals"] for path in item["paths"]]
+    seen += [path for item in plan["irreplaceable"] for path in item["paths"]]
+    assert len(seen) == len(set(seen)), (
+        "a path is listed twice — rebuilding a plan from a tree the verdicts were "
+        f"already written onto counts every judged item once from each source: {seen}"
+    )
+    claimed = sum(item["size_bytes"] for item in [*plan["proposals"], *plan["irreplaceable"]])
+    assert claimed <= plan["surveyed_bytes"], (
+        f"the plan promises {claimed} bytes out of {plan['surveyed_bytes']} surveyed"
     )

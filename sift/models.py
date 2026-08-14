@@ -38,6 +38,14 @@ class ScanNode(BaseModel):
     allocated_bytes: int
     children: list[ScanNode] = Field(default_factory=list)
 
+    last_used: float | None = None
+    """When this was last opened, as a Unix timestamp. For a directory, the most
+    recent moment anything inside it was opened.
+
+    Kept because "you have not opened this in three years" settles more arguments
+    than any size does, and it costs nothing — it is one field on a stat call the
+    walk already makes."""
+
     unreadable: bool = False
     """True when the OS refused to let us look inside. Not an error — a state the
     UI renders as a card with a grant button."""
@@ -75,6 +83,13 @@ class Candidate(BaseModel):
     label: str
     size_bytes: int
     file_count: int
+
+    last_used: float | None = None
+    """When anything inside was last opened, as a Unix timestamp.
+
+    The single most decisive fact about an unnamed folder. A 4 GB directory nobody
+    has touched in three years and a 4 GB directory touched this morning are the
+    same size and completely different decisions."""
 
     excluding: list[Path] = Field(default_factory=list)
     """Files inside this directory that are being judged separately, because they
@@ -118,6 +133,9 @@ class PlanItem(BaseModel):
     restore_time: str | None = None
     rule_id: str | None = None
     reason: str | None = None
+
+    last_used: float | None = None
+    """When anything this covers was last opened."""
 
     excluding: list[Path] = Field(default_factory=list)
     """Paths inside this item that it does not cover, because they are their own
