@@ -71,8 +71,13 @@
 	</h2>
 
 	{#if open}
+		<!--
+			Clipped only while there is something to clip. Left on permanently it
+			also cuts anything a row deliberately puts outside itself — the stack of
+			duplicate copies opens downwards, and the last row's would vanish.
+		-->
 		<div
-			class="overflow-hidden"
+			class:overflow-hidden={clipped}
 			class:fade-bottom={clipped}
 			style={clipped ? `max-height: ${PREVIEW}px` : ''}
 		>

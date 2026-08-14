@@ -10,7 +10,7 @@
 uvx --from git+https://github.com/JacopKane/sift sift
 ```
 
-That's it. It starts, opens your browser, and begins surveying. No config screen, no empty state.
+That's it. A window opens asking which folder — drop one in, or pick Downloads, Desktop or the whole disk. No config screen.
 
 Want the model to judge what the rules can't name? Add a key:
 
@@ -18,7 +18,7 @@ Want the model to judge what the rules can't name? Add a key:
 cp .env.example .env      # then paste one key: Gemini, OpenAI, or Claude
 ```
 
-Survey a different folder: `sift ~/Projects` · Whole disk: `sift /`
+Skip the question by naming a folder: `sift ~/Projects` · Whole disk: `sift /`
 
 ---
 

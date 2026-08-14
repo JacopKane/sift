@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Search from '@lucide/svelte/icons/search';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Copy from '@lucide/svelte/icons/copy';
@@ -191,6 +192,14 @@
 		surveyedRoot = null;
 		status = '';
 	}
+
+	// `sift ~/Projects` points the window at that folder. Honouring it here is
+	// what makes naming a folder on the command line mean anything; without it
+	// the argument is accepted, passed along, and quietly dropped.
+	onMount(() => {
+		const asked = new URLSearchParams(location.search).get('root');
+		if (asked) survey(asked);
+	});
 </script>
 
 <!--
