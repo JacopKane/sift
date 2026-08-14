@@ -29,10 +29,12 @@ Skip the question by naming a folder: `sift ~/Projects` · Whole disk: `sift /`
 
 ## What it does
 
+- **Takes plain requests.** *"Delete the screenshots on my desktop"* → those files, nothing else. This is the main way in.
 - **Finds what's big.** Walks a folder or the whole disk, streaming results as it counts.
 - **Says what's safe.** Every item gets a verdict: rebuilds itself, needs a decision, or can't be replaced.
+- **Tells you how long it's been.** Every row says when it was last opened. A 4 GB folder untouched for three years is a different decision from the same folder opened this morning.
 - **Tells you how to get it back.** `npm install`. `cargo build`. Or plainly: cannot be restored.
-- **Takes plain requests.** *"Delete the app installers I already installed"* → the two `.dmg` files, nothing else.
+- **Finds duplicates.** Same bytes, different names — one of them is free to take.
 - **Never deletes.** Reclaiming moves things to your Trash. `undo` puts them back.
 
 ---
@@ -108,8 +110,9 @@ Rebuild the frontend after changing it: `cd web && npm run build`
 
 ## Not built yet
 
-- Reading file contents — it asks you instead
-- Windows and Linux catalogs
+- Reading file contents — it judges by name, size, extension, age and what's inside a folder, never by opening a file
+- Recognising that an archive is a backup of something you still have
+- Windows and Linux catalogs — the scanner is portable, only the path rules are macOS
 - A native app shell
 
 ---
